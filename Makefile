@@ -7,8 +7,8 @@ COMMIT   ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 DATE     ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 LDFLAGS  := -s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.date=$(DATE)
 
-TUI_PKG  := ./cmd/tasktui
-CLI_PKG  := ./cmd/taskcli
+TUI_PKG  := ./cmd/tork
+CLI_PKG  := ./cmd/tork-cli
 
 TUI_BIN  := $(BUILD_DIR)/tork
 CLI_BIN  := $(BUILD_DIR)/tork-cli

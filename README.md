@@ -1,4 +1,8 @@
-# tork
+# Tork
+
+<p align="center">
+  <img src="assets/logo.png" alt="tork logo" width="200">
+</p>
 
 [![Go Version](https://img.shields.io/badge/go-1.22%2B-00ADD8)](https://go.dev/)
 [![Build](https://img.shields.io/badge/build-passing-brightgreen)](#development)
