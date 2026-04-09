@@ -18,6 +18,9 @@ go.work
 # Dependency directories
 vendor/
 
+# Build output
+build/
+
 # Build outputs
 /bin/
 /dist/
