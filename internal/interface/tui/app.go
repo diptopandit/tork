@@ -103,6 +103,7 @@ type Model struct {
 	rightWidth    int
 	contentHeight int
 	inputBoxH     int // right pane: input box total height
+	updatesH      int // right pane: updates viewport inner height (computed)
 }
 
 // NewModel assembles the root model.
@@ -422,6 +423,19 @@ func (m *Model) recalcLayout() {
 
 	m.detailView = m.detailView.SetWidth(rightInnerW)
 
+	// Compute updates viewport height from available space.
+	// Detail box height is estimated (will be refined at render time).
+	detailEstH := 8 // typical detail content lines + border
+	updatesTotal := m.contentHeight - detailEstH - m.inputBoxH
+	if updatesTotal < 4 {
+		updatesTotal = 4
+	}
+	m.updatesH = updatesTotal - 3
+	if m.updatesH < 1 {
+		m.updatesH = 1
+	}
+	m.detailView = m.detailView.SetUpdatesHeight(m.updatesH)
+
 	m.editView = m.editView.SetSize(m.width*60/100, m.height*70/100)
 	m.filterView = m.filterView.SetSize(m.width*50/100, m.height*50/100)
 }
@@ -549,9 +563,6 @@ func (m Model) renderRightPane() string {
 	if updatesInnerH < 1 {
 		updatesInnerH = 1
 	}
-
-	// Set the viewport height so scrolling works correctly.
-	m.detailView = m.detailView.SetUpdatesHeight(updatesInnerH)
 
 	detailStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
@@ -836,8 +847,12 @@ func (m Model) handleEditKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if saved := m.editView.SavedTask(); saved != nil {
 		m.editView = m.editView.ClearSaved()
 		if saved.ID == "" {
-			if len(m.state.TaskLists) > 0 {
-				return m, m.createTask(saved, m.state.TaskLists[0].ID)
+			listID := m.state.ActiveListID
+			if listID == "" && len(m.state.TaskLists) > 0 {
+				listID = m.state.TaskLists[0].ID
+			}
+			if listID != "" {
+				return m, m.createTask(saved, listID)
 			}
 			m.state.StatusMsg = "No task list available"
 			m.state.ActiveOverlay = OverlayNone
