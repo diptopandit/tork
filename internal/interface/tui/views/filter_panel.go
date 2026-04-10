@@ -6,10 +6,10 @@ import (
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 
 	"github.com/diptopandit/tork/internal/domain"
 	"github.com/diptopandit/tork/internal/infrastructure/config"
+	"github.com/diptopandit/tork/internal/interface/tui/styles"
 )
 
 // FilterView renders a dynamic filter builder panel.
@@ -22,7 +22,7 @@ type FilterView struct {
 	focusField  int // 0=search,1=due,2=tags
 	applied     bool
 	filter      domain.TaskFilter
-	theme       config.ThemeConfig
+	styles      styles.Styles
 	width       int
 	height      int
 }
@@ -35,7 +35,7 @@ const (
 )
 
 // NewFilterView constructs a FilterView.
-func NewFilterView(theme config.ThemeConfig, statuses []config.StatusDef, priorities []config.PriorityDef) FilterView {
+func NewFilterView(s styles.Styles, statuses []config.StatusDef, priorities []config.PriorityDef) FilterView {
 	si := textinput.New()
 	si.Placeholder = "Search..."
 	si.Focus()
@@ -63,7 +63,7 @@ func NewFilterView(theme config.ThemeConfig, statuses []config.StatusDef, priori
 		searchInput: si,
 		dueBefore:   di,
 		tagsInput:   ti,
-		theme:       theme,
+		styles:      s,
 		statuses:    smap,
 		priorities:  pmap,
 	}
@@ -127,8 +127,8 @@ func (m FilterView) Update(msg tea.Msg) (FilterView, tea.Cmd) {
 
 // View renders the filter panel.
 func (m FilterView) View() string {
-	heading := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(m.theme.Primary)).Render("Filters")
-	hint := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Secondary)).
+	heading := m.styles.LabelFocused.Render("Filters")
+	hint := m.styles.HintText.
 		Render("Tab/↑↓ to navigate  •  Enter to apply  •  Esc to cancel")
 
 	rows := []string{
@@ -148,11 +148,9 @@ func (m FilterView) View() string {
 // ---- helpers ----------------------------------------------------------------
 
 func (m FilterView) fieldRow(label, input string, focused bool) string {
-	lStyle := lipgloss.NewStyle().Bold(true)
+	lStyle := m.styles.LabelUnfocused
 	if focused {
-		lStyle = lStyle.Foreground(lipgloss.Color(m.theme.Primary))
-	} else {
-		lStyle = lStyle.Foreground(lipgloss.Color(m.theme.TextMuted))
+		lStyle = m.styles.LabelFocused
 	}
 	return lStyle.Render(label+":") + "\n  " + input
 }

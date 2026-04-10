@@ -22,19 +22,7 @@
     "tab_order": ["todo", "in_progress", "done", "all"],
     "default_tab": "todo"
   },
-  "theme": {
-    "primary": "#7C3AED",
-    "secondary": "#6B7280",
-    "active": "#7C3AED",
-    "inactive": "#374151",
-    "success": "#10B981",
-    "warning": "#F59E0B",
-    "danger": "#EF4444",
-    "text": "#E5E7EB",
-    "text_muted": "#9CA3AF",
-    "text_bright": "#FFFFFF",
-    "accent": "#60A5FA"
-  },
+  "theme": "default",
   "statuses": [
     { "name": "todo", "label": "Todo" },
     { "name": "in_progress", "label": "In Progress" },

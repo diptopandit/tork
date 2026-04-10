@@ -11,6 +11,7 @@ import (
 
 	"github.com/diptopandit/tork/internal/domain"
 	"github.com/diptopandit/tork/internal/infrastructure/config"
+	"github.com/diptopandit/tork/internal/interface/tui/styles"
 )
 
 // UpdateSubmittedMsg is sent when the user submits a new update from the inline input.
@@ -24,8 +25,9 @@ type UpdateSubmittedMsg struct {
 // into separate bordered boxes.
 type DetailView struct {
 	cfg        config.DisplayConfig
-	theme      config.ThemeConfig
+	styles     styles.Styles
 	priorities []config.PriorityDef
+	statuses   []config.StatusDef
 	task       *domain.Task
 	updates    viewport.Model
 	input      textarea.Model
@@ -34,7 +36,7 @@ type DetailView struct {
 }
 
 // NewDetailView constructs a DetailView.
-func NewDetailView(cfg config.DisplayConfig, theme config.ThemeConfig, priorities []config.PriorityDef) DetailView {
+func NewDetailView(cfg config.DisplayConfig, s styles.Styles, priorities []config.PriorityDef, statuses []config.StatusDef) DetailView {
 	vp := viewport.New(80, 10)
 
 	ta := textarea.New()
@@ -45,8 +47,9 @@ func NewDetailView(cfg config.DisplayConfig, theme config.ThemeConfig, prioritie
 
 	return DetailView{
 		cfg:        cfg,
-		theme:      theme,
+		styles:     s,
 		priorities: priorities,
+		statuses:   statuses,
 		updates:    vp,
 		input:      ta,
 	}
@@ -132,8 +135,7 @@ func (m DetailView) Update(msg tea.Msg) (DetailView, tea.Cmd) {
 // ViewDetails renders the fixed task-detail section.
 func (m DetailView) ViewDetails() string {
 	if m.task == nil {
-		return lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Secondary)).
-			Render("No task selected.")
+		return m.styles.EmptyState.Render("No task selected.")
 	}
 	return m.renderDetails(m.task)
 }
@@ -153,16 +155,13 @@ func (m DetailView) renderDetails(t *domain.Task) string {
 	if t == nil {
 		return ""
 	}
-	labelStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(m.theme.Primary))
-	valueStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Text))
+	labelStyle := m.styles.FieldLabel
+	valueStyle := m.styles.FieldValue
 
 	var sb strings.Builder
 
 	// Line 1: Title with bright contrasting color
-	titleStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color(m.theme.Warning))
-	sb.WriteString(titleStyle.Render(fmt.Sprintf("#%d %s", t.NumID, t.Title)) + "\n")
+	sb.WriteString(m.styles.Title.Render(fmt.Sprintf("#%d %s", t.NumID, t.Title)) + "\n")
 
 	// Two-column layout helper
 	colW := m.width / 2
@@ -171,16 +170,36 @@ func (m DetailView) renderDetails(t *domain.Task) string {
 	}
 	leftCol := lipgloss.NewStyle().Width(colW)
 
+	// Status color from positional theme colors
+	statusColor := m.styles.Theme.Primary
+	for i, s := range m.statuses {
+		if s.Name == string(t.Status) {
+			statusColor = m.styles.Theme.StatusColor(i)
+			break
+		}
+	}
+	statusValueStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(statusColor))
+
 	// Line 2: Status | Created
-	statusCell := labelStyle.Render("Status: ") + valueStyle.Render(string(t.Status))
+	statusCell := labelStyle.Render("Status: ") + statusValueStyle.Render(string(t.Status))
 	createdCell := ""
 	if m.cfg.ShowTimestamps {
 		createdCell = labelStyle.Render("Created: ") + valueStyle.Render(t.CreatedAt.Format(m.cfg.DateFormat+" 15:04"))
 	}
 	sb.WriteString(leftCol.Render(statusCell) + createdCell + "\n")
 
+	// Priority color from positional theme colors
+	priColor := m.styles.Theme.Primary
+	for i, p := range m.priorities {
+		if p.Value == int(t.Priority) {
+			priColor = m.styles.Theme.PriorityColor(i)
+			break
+		}
+	}
+	priValueStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(priColor))
+
 	// Line 3: Priority | Modified
-	priCell := labelStyle.Render("Priority: ") + valueStyle.Render(config.PriorityLabel(m.priorities, int(t.Priority)))
+	priCell := labelStyle.Render("Priority: ") + priValueStyle.Render(config.PriorityLabel(m.priorities, int(t.Priority)))
 	modifiedCell := ""
 	if m.cfg.ShowTimestamps {
 		modifiedCell = labelStyle.Render("Modified: ") + valueStyle.Render(t.UpdatedAt.Format(m.cfg.DateFormat+" 15:04"))
@@ -206,11 +225,10 @@ func (m DetailView) renderDetails(t *domain.Task) string {
 // renderUpdates builds the scrollable updates content (newest first).
 func (m DetailView) renderUpdates(t *domain.Task) string {
 	if t == nil || len(t.Updates) == 0 {
-		return lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Secondary)).
-			Render("  No updates yet. Press u to add one.")
+		return m.styles.EmptyState.Render("  No updates yet. Press u to add one.")
 	}
-	valueStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Text))
-	tsStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Accent))
+	valueStyle := m.styles.FieldValue
+	tsStyle := m.styles.Timestamp
 	var sb strings.Builder
 	for _, u := range t.Updates {
 		ts := u.CreatedAt.Format(m.cfg.DateFormat + " 15:04")

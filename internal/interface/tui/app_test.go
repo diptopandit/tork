@@ -56,12 +56,16 @@ func newTestModel() Model {
 			TabOrder:       []string{"todo", "in_progress", "done", "all"},
 			DefaultTab:     "todo",
 		},
+		ThemeName: "default",
 		Theme: config.ThemeConfig{
 			Primary: "#7C3AED", Secondary: "#6B7280",
 			Active: "#7C3AED", Inactive: "#374151",
 			Success: "#10B981", Warning: "#F59E0B", Danger: "#EF4444",
 			Text: "#E5E7EB", TextMuted: "#9CA3AF",
 			TextBright: "#FFFFFF", Accent: "#60A5FA",
+			Border:         "rounded",
+			StatusColors:   []string{"#F59E0B", "#60A5FA", "#10B981", "#EF4444"},
+			PriorityColors: []string{"#6B7280", "#F59E0B", "#FB923C", "#EF4444"},
 		},
 		Statuses: []config.StatusDef{
 			{Name: "todo", Label: "Todo"},

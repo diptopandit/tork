@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/charmbracelet/lipgloss"
 )
 
 // StatusDef defines a task status with its internal name and display label.
@@ -122,19 +124,64 @@ type DisplayConfig struct {
 	DefaultTab     string   `json:"default_tab"`     // tab selected on startup
 }
 
-// ThemeConfig holds lipgloss color references.
+// ThemeConfig holds resolved lipgloss color references used at runtime.
 type ThemeConfig struct {
-	Primary    string `json:"primary"`
-	Secondary  string `json:"secondary"`
-	Active     string `json:"active"`
-	Inactive   string `json:"inactive"`
-	Success    string `json:"success"`
-	Warning    string `json:"warning"`
-	Danger     string `json:"danger"`
-	Text       string `json:"text"`        // primary text color (light)
-	TextMuted  string `json:"text_muted"`  // muted/placeholder text
-	TextBright string `json:"text_bright"` // high-contrast bright text
-	Accent     string `json:"accent"`      // accent for timestamps, highlights
+	Primary        string   `json:"primary"`
+	Secondary      string   `json:"secondary"`
+	Active         string   `json:"active"`
+	Inactive       string   `json:"inactive"`
+	Success        string   `json:"success"`
+	Warning        string   `json:"warning"`
+	Danger         string   `json:"danger"`
+	Text           string   `json:"text"`            // primary text color (light)
+	TextMuted      string   `json:"text_muted"`      // muted/placeholder text
+	TextBright     string   `json:"text_bright"`     // high-contrast bright text
+	Accent         string   `json:"accent"`          // accent for timestamps, highlights
+	Border         string   `json:"border"`          // "rounded", "normal", "double", "hidden"
+	StatusColors   []string `json:"status_colors"`   // positional colors for statuses
+	PriorityColors []string `json:"priority_colors"` // positional colors for priorities
+}
+
+// StatusColor returns the color for a status at the given index, falling back to Primary.
+func (t *ThemeConfig) StatusColor(index int) string {
+	if index >= 0 && index < len(t.StatusColors) {
+		return t.StatusColors[index]
+	}
+	return t.Primary
+}
+
+// PriorityColor returns the color for a priority at the given index, falling back to Primary.
+func (t *ThemeConfig) PriorityColor(index int) string {
+	if index >= 0 && index < len(t.PriorityColors) {
+		return t.PriorityColors[index]
+	}
+	return t.Primary
+}
+
+// BorderStyle returns the lipgloss border matching the configured border name.
+func (t *ThemeConfig) BorderStyle() lipgloss.Border {
+	switch t.Border {
+	case "normal":
+		return lipgloss.NormalBorder()
+	case "double":
+		return lipgloss.DoubleBorder()
+	case "hidden":
+		return lipgloss.HiddenBorder()
+	default:
+		return lipgloss.RoundedBorder()
+	}
+}
+
+// ThemeFile represents a complete theme definition stored as a JSON file
+// or embedded as a built-in preset.
+type ThemeFile struct {
+	Name           string      `json:"name"`
+	Description    string      `json:"description"`
+	Author         string      `json:"author"`
+	Colors         ThemeConfig `json:"colors"` // only the 11 semantic color fields are used
+	Border         string      `json:"border"`
+	StatusColors   []string    `json:"status_colors"`
+	PriorityColors []string    `json:"priority_colors"`
 }
 
 // Config is the top-level application configuration.
@@ -142,7 +189,8 @@ type Config struct {
 	DataDir     string        `json:"data_dir"` // directory for db, logs, config (default: ~/.tork)
 	Keybindings KeyMap        `json:"keybindings"`
 	Display     DisplayConfig `json:"display"`
-	Theme       ThemeConfig   `json:"theme"`
+	ThemeName   string        `json:"theme"`        // name of the active theme
+	Theme       ThemeConfig   `json:"-"`            // resolved at load time, not serialized
 	Statuses    []StatusDef   `json:"statuses"`     // ordered task statuses
 	Priorities  []PriorityDef `json:"priorities"`   // ordered priority levels
 	DefaultList string        `json:"default_list"` // list name or ID to open on startup

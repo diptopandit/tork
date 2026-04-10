@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // defaults returns a Config pre-populated with sensible values.
 func defaults() Config {
 	return Config{
+		ThemeName: "default",
 		Keybindings: KeyMap{
 			Up:     "k",
 			Down:   "j",
@@ -32,19 +34,6 @@ func defaults() Config {
 			TabOrder:       []string{"todo", "in_progress", "done", "all"},
 			DefaultTab:     "todo",
 		},
-		Theme: ThemeConfig{
-			Primary:    "#7C3AED",
-			Secondary:  "#6B7280",
-			Active:     "#7C3AED",
-			Inactive:   "#374151",
-			Success:    "#10B981",
-			Warning:    "#F59E0B",
-			Danger:     "#EF4444",
-			Text:       "#E5E7EB",
-			TextMuted:  "#9CA3AF",
-			TextBright: "#FFFFFF",
-			Accent:     "#60A5FA",
-		},
 		Statuses: []StatusDef{
 			{Name: "todo", Label: "Todo"},
 			{Name: "in_progress", Label: "In Progress"},
@@ -60,8 +49,56 @@ func defaults() Config {
 	}
 }
 
-// Load reads ~/.tork/config.json and merges it over the defaults.
-// If the file does not exist the defaults are returned without error.
+// ResolveTheme looks up a theme by name from built-in presets or user files
+// in the configDir/themes/ directory. It validates the result before returning.
+func ResolveTheme(themeName string, configDir string) (ThemeFile, error) {
+	if themeName == "" {
+		themeName = "default"
+	}
+
+	// Check built-in themes first.
+	if t, ok := BuiltinThemes[themeName]; ok {
+		return t, nil
+	}
+
+	// Check user theme file.
+	themePath := filepath.Join(configDir, "themes", themeName+".json")
+	data, err := os.ReadFile(themePath)
+	if os.IsNotExist(err) {
+		names := strings.Join(BuiltinThemeNames(), ", ")
+		return ThemeFile{}, fmt.Errorf("theme %q not found (built-in themes: %s; also checked %s)", themeName, names, themePath)
+	}
+	if err != nil {
+		return ThemeFile{}, fmt.Errorf("theme: read %s: %w", themePath, err)
+	}
+
+	var tf ThemeFile
+	if err := json.Unmarshal(data, &tf); err != nil {
+		return ThemeFile{}, fmt.Errorf("theme: parse %s: %w", themePath, err)
+	}
+	if tf.Name == "" {
+		tf.Name = themeName
+	}
+	if err := ValidateTheme(tf); err != nil {
+		return ThemeFile{}, err
+	}
+	return tf, nil
+}
+
+// applyTheme populates the runtime Theme field on cfg from a resolved ThemeFile.
+func applyTheme(cfg *Config, tf ThemeFile) {
+	cfg.Theme = tf.Colors
+	cfg.Theme.Border = tf.Border
+	if cfg.Theme.Border == "" {
+		cfg.Theme.Border = "rounded"
+	}
+	cfg.Theme.StatusColors = tf.StatusColors
+	cfg.Theme.PriorityColors = tf.PriorityColors
+}
+
+// Load reads ~/.tork/config.json, resolves the named theme, and merges
+// everything over the defaults. If the file does not exist the defaults are
+// returned without error.
 func Load() (*Config, error) {
 	cfg := defaults()
 
@@ -69,19 +106,49 @@ func Load() (*Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("config: resolve home: %w", err)
 	}
-	path := filepath.Join(home, ".tork", "config.json")
+	configDir := filepath.Join(home, ".tork")
+	path := filepath.Join(configDir, "config.json")
 
 	data, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
+		// No config file — apply default theme and return.
+		tf := BuiltinThemes["default"]
+		applyTheme(&cfg, tf)
 		return &cfg, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("config: read file: %w", err)
 	}
 
+	// Peek at the "theme" field to handle migration from old inline object format.
+	// If it's a JSON object (old format), silently treat it as "default".
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err == nil {
+		if themeRaw, ok := raw["theme"]; ok && len(themeRaw) > 0 {
+			trimmed := strings.TrimSpace(string(themeRaw))
+			if strings.HasPrefix(trimmed, "{") {
+				// Old inline theme object — replace with "default" for this load.
+				raw["theme"] = json.RawMessage(`"default"`)
+				data, _ = json.Marshal(raw)
+			}
+		}
+	}
+
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("config: parse JSON: %w", err)
 	}
+
+	// Ensure themes directory exists.
+	themesDir := filepath.Join(configDir, "themes")
+	_ = os.MkdirAll(themesDir, 0o755)
+
+	// Resolve and apply theme.
+	tf, err := ResolveTheme(cfg.ThemeName, configDir)
+	if err != nil {
+		return nil, err
+	}
+	applyTheme(&cfg, tf)
+
 	return &cfg, nil
 }
 
@@ -103,4 +170,33 @@ func Save(cfg *Config) error {
 		return fmt.Errorf("config: write: %w", err)
 	}
 	return nil
+}
+
+// ListThemes returns the names of all available themes (built-in + user files).
+func ListThemes(configDir string) []string {
+	seen := make(map[string]bool)
+	var names []string
+	for _, n := range BuiltinThemeNames() {
+		names = append(names, n)
+		seen[n] = true
+	}
+	themesDir := filepath.Join(configDir, "themes")
+	entries, err := os.ReadDir(themesDir)
+	if err != nil {
+		return names
+	}
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if strings.HasSuffix(name, ".json") {
+			base := strings.TrimSuffix(name, ".json")
+			if !seen[base] {
+				names = append(names, base)
+				seen[base] = true
+			}
+		}
+	}
+	return names
 }

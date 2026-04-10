@@ -13,6 +13,7 @@ import (
 	"github.com/diptopandit/tork/internal/application"
 	"github.com/diptopandit/tork/internal/domain"
 	"github.com/diptopandit/tork/internal/infrastructure/config"
+	"github.com/diptopandit/tork/internal/interface/tui/styles"
 	"github.com/diptopandit/tork/internal/interface/tui/views"
 )
 
@@ -83,6 +84,7 @@ type Model struct {
 	taskSvc    *application.TaskService
 	listSvc    *application.ListService
 	cfg        *config.Config
+	styles     styles.Styles
 	keymap     KeyMap
 	help       help.Model
 	state      AppState
@@ -116,6 +118,7 @@ func NewModel(
 ) Model {
 	km := NewKeyMap(cfg.Keybindings)
 	h := help.New()
+	s := styles.NewStyles(cfg.Theme)
 
 	lsInput := textinput.New()
 	lsInput.Placeholder = "List name"
@@ -159,12 +162,13 @@ func NewModel(
 		taskSvc:         taskSvc,
 		listSvc:         listSvc,
 		cfg:             cfg,
+		styles:          s,
 		keymap:          km,
 		help:            h,
-		listView:        views.NewListView(cfg.Display, cfg.Theme, cfg.Priorities),
-		detailView:      views.NewDetailView(cfg.Display, cfg.Theme, cfg.Priorities),
-		editView:        views.NewEditView(cfg.Theme, cfg.Statuses, cfg.Priorities),
-		filterView:      views.NewFilterView(cfg.Theme, cfg.Statuses, cfg.Priorities),
+		listView:        views.NewListView(cfg.Display, s, cfg.Priorities),
+		detailView:      views.NewDetailView(cfg.Display, s, cfg.Priorities, cfg.Statuses),
+		editView:        views.NewEditView(s, cfg.Statuses, cfg.Priorities),
+		filterView:      views.NewFilterView(s, cfg.Statuses, cfg.Priorities),
 		listSwitchInput: lsInput,
 		tabOrder:        tabOrder,
 		state: AppState{
@@ -372,8 +376,7 @@ func (m Model) View() string {
 	for i := range sepLines {
 		sepLines[i] = "\u2502"
 	}
-	sepCol := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(m.cfg.Theme.Inactive)).
+	sepCol := m.styles.Separator.
 		Render(strings.Join(sepLines, "\n"))
 
 	body := lipgloss.JoinHorizontal(lipgloss.Top, leftPane, sepCol, rightPane)
@@ -491,25 +494,16 @@ func (m *Model) syncDetailToSelection() tea.Cmd {
 // ---- render: header (tab bar) -----------------------------------------------
 
 func (m Model) renderTabs() string {
-	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(m.cfg.Theme.Primary))
-	title := titleStyle.Render("tork")
+	title := m.styles.AppTitle.Render("tork")
 
 	tabs := m.tabOrder
 	var parts []string
 	for i, name := range tabs {
 		label := TabLabel(m.cfg.Statuses, name)
 		if i == m.state.ActiveTab {
-			style := lipgloss.NewStyle().
-				Bold(true).
-				Foreground(lipgloss.Color(m.cfg.Theme.TextBright)).
-				Background(lipgloss.Color(m.cfg.Theme.Primary)).
-				Padding(0, 1)
-			parts = append(parts, style.Render(label))
+			parts = append(parts, m.styles.TabActive.Render(label))
 		} else {
-			style := lipgloss.NewStyle().
-				Foreground(lipgloss.Color(m.cfg.Theme.Secondary)).
-				Padding(0, 1)
-			parts = append(parts, style.Render(label))
+			parts = append(parts, m.styles.TabInactive.Render(label))
 		}
 	}
 
@@ -529,9 +523,7 @@ func (m Model) renderTabs() string {
 	}
 	rightPart := ""
 	if listLabel != "" {
-		rightPart = lipgloss.NewStyle().
-			Foreground(lipgloss.Color(m.cfg.Theme.TextMuted)).
-			Render("☰ " + listLabel)
+		rightPart = m.styles.ListLabel.Render("☰ " + listLabel)
 	}
 
 	gap := m.width - lipgloss.Width(leftPart) - lipgloss.Width(rightPart)
@@ -546,14 +538,11 @@ func (m Model) renderTabs() string {
 // ---- render: left pane (task list) ------------------------------------------
 
 func (m Model) renderLeftPane() string {
-	borderColor := lipgloss.Color(m.cfg.Theme.Inactive)
+	style := m.styles.PaneBorderUnfocused
 	if m.state.ActivePane == PaneList {
-		borderColor = lipgloss.Color(m.cfg.Theme.Primary)
+		style = m.styles.PaneBorderFocused
 	}
-
-	style := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(borderColor).
+	style = style.
 		Width(m.leftWidth - 2).
 		Height(m.contentHeight - 2)
 
@@ -563,10 +552,10 @@ func (m Model) renderLeftPane() string {
 // ---- render: right pane (detail) --------------------------------------------
 
 func (m Model) renderRightPane() string {
-	borderColor := lipgloss.Color(m.cfg.Theme.Inactive)
-	activeBorder := lipgloss.Color(m.cfg.Theme.Primary)
+	borderStyle := m.styles.PaneBorderUnfocused
+	focusedBorderStyle := m.styles.PaneBorderFocused
 	if m.state.ActivePane == PaneDetail {
-		borderColor = activeBorder
+		borderStyle = focusedBorderStyle
 	}
 
 	boxW := m.rightWidth - 2
@@ -601,27 +590,21 @@ func (m Model) renderRightPane() string {
 		updatesInnerH = 1
 	}
 
-	detailStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(borderColor).
+	detailStyle := borderStyle.
 		Width(boxW).
 		Height(detailInnerH)
 	detailBox := detailStyle.Render(detailContent)
 
-	updatesStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(borderColor).
+	updatesStyle := borderStyle.
 		Width(boxW).
 		Height(updatesInnerH)
 	updatesBox := updatesStyle.Render(m.detailView.ViewUpdates())
 
-	inputBorder := borderColor
+	inputBorderStyle := borderStyle
 	if m.detailView.InputFocused() {
-		inputBorder = activeBorder
+		inputBorderStyle = focusedBorderStyle
 	}
-	inputStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(inputBorder).
+	inputStyle := inputBorderStyle.
 		Width(boxW).
 		Height(m.inputBoxH - 2)
 	inputBox := inputStyle.Render(m.detailView.ViewInput())
@@ -639,8 +622,7 @@ func (m Model) renderFooter() string {
 		count := len(m.state.Tasks)
 		status = fmt.Sprintf("%d task(s)", count)
 	}
-	left := lipgloss.NewStyle().Foreground(lipgloss.Color(m.cfg.Theme.Secondary)).
-		Render(status)
+	left := m.styles.FooterText.Render(status)
 
 	helpLine := m.help.ShortHelpView(m.keymap.ShortHelp())
 
@@ -654,41 +636,28 @@ func (m Model) renderFooter() string {
 // ---- render: overlays -------------------------------------------------------
 
 func (m Model) renderEditOverlay() string {
-	boxStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color(m.cfg.Theme.Warning)).
-		Padding(1, 2)
-	return boxStyle.Render(m.editView.View())
+	return m.styles.OverlayEdit.Render(m.editView.View())
 }
 
 func (m Model) renderFilterOverlay() string {
-	boxStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color(m.cfg.Theme.Secondary)).
-		Padding(1, 2)
-	return boxStyle.Render(m.filterView.View())
+	return m.styles.OverlayFilter.Render(m.filterView.View())
 }
 
 func (m Model) renderHelpOverlay() string {
-	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(m.cfg.Theme.Primary))
-	sectionStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(m.cfg.Theme.Warning))
-	keyStyle := lipgloss.NewStyle().Bold(true).Width(18).Foreground(lipgloss.Color(m.cfg.Theme.Accent))
-	descStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.cfg.Theme.Text))
-
 	var b strings.Builder
 
-	b.WriteString(titleStyle.Render("Keybindings") + "\n\n")
+	b.WriteString(m.styles.HelpTitle.Render("Keybindings") + "\n\n")
 
-	b.WriteString(sectionStyle.Render("Navigation") + "\n")
+	b.WriteString(m.styles.HelpSection.Render("Navigation") + "\n")
 	for _, bind := range []struct{ k, desc string }{
 		{"j/\u2193  k/\u2191", "Move down / up"},
 		{"h/\u2190 l/\u2192", "Focus left / right pane"},
 		{"Tab / Shift+Tab", "Next / previous status tab"},
 	} {
-		b.WriteString("  " + keyStyle.Render(bind.k) + descStyle.Render(bind.desc) + "\n")
+		b.WriteString("  " + m.styles.HelpKey.Render(bind.k) + m.styles.HelpDesc.Render(bind.desc) + "\n")
 	}
 
-	b.WriteString("\n" + sectionStyle.Render("Actions") + "\n")
+	b.WriteString("\n" + m.styles.HelpSection.Render("Actions") + "\n")
 	for _, bind := range []struct{ k, desc string }{
 		{"n", "New task"},
 		{"e", "Edit task"},
@@ -699,28 +668,22 @@ func (m Model) renderHelpOverlay() string {
 		{"/", "Search / filter"},
 		{"Enter", "Select / view detail"},
 	} {
-		b.WriteString("  " + keyStyle.Render(bind.k) + descStyle.Render(bind.desc) + "\n")
+		b.WriteString("  " + m.styles.HelpKey.Render(bind.k) + m.styles.HelpDesc.Render(bind.desc) + "\n")
 	}
 
-	b.WriteString("\n" + sectionStyle.Render("General") + "\n")
+	b.WriteString("\n" + m.styles.HelpSection.Render("General") + "\n")
 	for _, bind := range []struct{ k, desc string }{
 		{"L", "Switch task list (n: new, r: rename, d: delete)"},
 		{"?", "Toggle this help"},
 		{"q / Ctrl+C", "Quit"},
 		{"Esc", "Close overlay / back"},
 	} {
-		b.WriteString("  " + keyStyle.Render(bind.k) + descStyle.Render(bind.desc) + "\n")
+		b.WriteString("  " + m.styles.HelpKey.Render(bind.k) + m.styles.HelpDesc.Render(bind.desc) + "\n")
 	}
 
-	b.WriteString("\n" + lipgloss.NewStyle().Foreground(lipgloss.Color(m.cfg.Theme.Secondary)).
-		Render("Press Esc or ? to close"))
+	b.WriteString("\n" + m.styles.HintText.Render("Press Esc or ? to close"))
 
-	boxStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color(m.cfg.Theme.Primary)).
-		Padding(1, 2)
-
-	return boxStyle.Render(b.String())
+	return m.styles.OverlayHelp.Render(b.String())
 }
 
 // ---- key routing ------------------------------------------------------------
@@ -1229,11 +1192,11 @@ func (m Model) handleListSwitchKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // ---- overlay renderers ------------------------------------------------------
 
 func (m Model) renderListSwitchOverlay() string {
-	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(m.cfg.Theme.Primary))
-	cursorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.cfg.Theme.TextBright)).Background(lipgloss.Color(m.cfg.Theme.Primary)).Bold(true).Padding(0, 1)
-	normalStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.cfg.Theme.Text)).Padding(0, 1)
-	hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.cfg.Theme.Secondary))
-	dangerStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(m.cfg.Theme.Danger))
+	titleStyle := m.styles.HelpTitle
+	cursorStyle := m.styles.ListCursor
+	normalStyle := m.styles.ListNormal
+	hintStyle := m.styles.HintText
+	dangerStyle := m.styles.DangerText
 
 	var b strings.Builder
 
@@ -1290,10 +1253,5 @@ func (m Model) renderListSwitchOverlay() string {
 		b.WriteString("\n" + hintStyle.Render("j/k: navigate  Enter: select  n: new  r: rename  d: delete  Esc: close"))
 	}
 
-	boxStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color(m.cfg.Theme.Primary)).
-		Padding(1, 2).
-		Width(50)
-	return boxStyle.Render(b.String())
+	return m.styles.OverlayList.Render(b.String())
 }

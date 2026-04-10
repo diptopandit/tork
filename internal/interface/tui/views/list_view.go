@@ -9,13 +9,14 @@ import (
 
 	"github.com/diptopandit/tork/internal/domain"
 	"github.com/diptopandit/tork/internal/infrastructure/config"
+	"github.com/diptopandit/tork/internal/interface/tui/styles"
 )
 
 // ListView wraps bubbles/table and manages the task list pane.
 type ListView struct {
 	table       table.Model
 	cfg         config.DisplayConfig
-	theme       config.ThemeConfig
+	styles      styles.Styles
 	priorities  []config.PriorityDef
 	tasks       []domain.Task
 	width       int
@@ -25,37 +26,16 @@ type ListView struct {
 }
 
 // NewListView constructs a ListView.
-func NewListView(cfg config.DisplayConfig, theme config.ThemeConfig, priorities []config.PriorityDef) ListView {
+func NewListView(cfg config.DisplayConfig, s styles.Styles, priorities []config.PriorityDef) ListView {
 	activeStyle := table.DefaultStyles()
-	activeStyle.Cell = activeStyle.Cell.Padding(0, 0)
-	activeStyle.Header = lipgloss.NewStyle().
-		Padding(0, 0).
-		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color(theme.Primary)).
-		BorderBottom(true).
-		Bold(true).
-		Foreground(lipgloss.Color(theme.TextBright)).
-		MaxWidth(80)
-	activeStyle.Selected = lipgloss.NewStyle().
-		Padding(0, 0).
-		Foreground(lipgloss.Color(theme.TextBright)).
-		Background(lipgloss.Color(theme.Primary)).
-		Bold(true)
+	activeStyle.Cell = s.TableCellActive
+	activeStyle.Header = s.TableHeaderActive
+	activeStyle.Selected = s.TableSelectedActive
 
 	inactStyle := table.DefaultStyles()
-	inactStyle.Cell = inactStyle.Cell.Padding(0, 0)
-	inactStyle.Header = lipgloss.NewStyle().
-		Padding(0, 0).
-		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color(theme.Inactive)).
-		BorderBottom(true).
-		Bold(false).
-		Foreground(lipgloss.Color(theme.TextMuted)).
-		MaxWidth(80)
-	inactStyle.Selected = lipgloss.NewStyle().
-		Padding(0, 0).
-		Foreground(lipgloss.Color(theme.Text)).
-		Background(lipgloss.Color(theme.Inactive))
+	inactStyle.Cell = s.TableCellInactive
+	inactStyle.Header = s.TableHeaderInactive
+	inactStyle.Selected = s.TableSelectedInactive
 
 	t := table.New(
 		table.WithColumns(buildColumns(cfg.Columns, 80)),
@@ -66,7 +46,7 @@ func NewListView(cfg config.DisplayConfig, theme config.ThemeConfig, priorities 
 	return ListView{
 		table:       t,
 		cfg:         cfg,
-		theme:       theme,
+		styles:      s,
 		priorities:  priorities,
 		activeStyle: activeStyle,
 		inactStyle:  inactStyle,

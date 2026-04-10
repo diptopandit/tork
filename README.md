@@ -47,7 +47,8 @@ tork is built for engineers who want a local-first task manager that is:
 - **Task updates** — immutable timestamped comments on any task (press `u` to add)
 - **Task lists** — create, rename, delete, and switch between multiple task lists
 - **Full-text search** — powered by SQLite FTS5
-- **Configurable** — keybindings, date format, theme colors, display columns, statuses, priorities
+- **Configurable** — keybindings, date format, named themes, display columns, statuses, priorities
+- **Themes** — 5 built-in themes (default, light, dracula, solarized-dark, nord) + custom theme files
 - **Offline-first** — all data stored locally in SQLite
 
 ## Installation
@@ -211,19 +212,7 @@ Config example:
     "tab_order": ["todo", "in_progress", "done", "all"],
     "default_tab": "todo"
   },
-  "theme": {
-    "primary": "#7C3AED",
-    "secondary": "#6B7280",
-    "active": "#7C3AED",
-    "inactive": "#374151",
-    "success": "#10B981",
-    "warning": "#F59E0B",
-    "danger": "#EF4444",
-    "text": "#E5E7EB",
-    "text_muted": "#9CA3AF",
-    "text_bright": "#FFFFFF",
-    "accent": "#60A5FA"
-  },
+  "theme": "default",
   "statuses": [
     { "name": "todo", "label": "Todo" },
     { "name": "in_progress", "label": "In Progress" },
@@ -256,6 +245,63 @@ Define your own statuses in the `statuses` array. Each entry has a `name` (store
 ### Custom Priorities
 
 Define your own priorities in the `priorities` array. Each entry has a `name` (used in CLI), a numeric `value` (stored in DB, used for sorting), and a `label` (displayed in TUI). In the edit modal, enter the 1-indexed position (e.g., `1` for the first priority).
+
+### Themes
+
+tork supports named themes. Set the `"theme"` field in config.json to one of the built-in theme names or the name of a custom theme file.
+
+**Built-in themes:** `default`, `light`, `dracula`, `solarized-dark`, `nord`
+
+```json
+{
+  "theme": "dracula"
+}
+```
+
+#### Custom Themes
+
+Create a JSON file in `~/.tork/themes/` with the theme name as the filename:
+
+```
+~/.tork/themes/my-theme.json
+```
+
+Then set `"theme": "my-theme"` in config.json.
+
+**Theme file format:**
+
+```json
+{
+  "name": "my-theme",
+  "description": "My custom tork theme",
+  "author": "Your Name",
+  "colors": {
+    "primary": "#7C3AED",
+    "secondary": "#6B7280",
+    "active": "#7C3AED",
+    "inactive": "#374151",
+    "success": "#10B981",
+    "warning": "#F59E0B",
+    "danger": "#EF4444",
+    "text": "#E5E7EB",
+    "text_muted": "#9CA3AF",
+    "text_bright": "#FFFFFF",
+    "accent": "#60A5FA"
+  },
+  "border": "rounded",
+  "status_colors": ["#F59E0B", "#60A5FA", "#10B981", "#EF4444"],
+  "priority_colors": ["#6B7280", "#F59E0B", "#FB923C", "#EF4444"]
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `colors` | 11 semantic color slots (all required) |
+| `border` | Border style: `rounded`, `normal`, `double`, or `hidden` |
+| `status_colors` | Positional array — index 0 is the first status in your `statuses` config, index 1 is the second, etc. |
+| `priority_colors` | Positional array — index 0 is the first priority in your `priorities` config, etc. |
+
+All fields are required. Theme files are validated on load; missing fields produce a clear error message.
 
 ## Roadmap
 

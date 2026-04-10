@@ -9,10 +9,10 @@ import (
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 
 	"github.com/diptopandit/tork/internal/domain"
 	"github.com/diptopandit/tork/internal/infrastructure/config"
+	"github.com/diptopandit/tork/internal/interface/tui/styles"
 )
 
 // EditView is a modal form for creating or editing a task.
@@ -25,7 +25,7 @@ type EditView struct {
 	focusIndex int          // 0=title,1=desc,2=priority,3=due,4=tags
 	task       *domain.Task // nil when creating a new task
 	savedTask  *domain.Task // non-nil when user pressed Enter/Ctrl+S
-	theme      config.ThemeConfig
+	styles     styles.Styles
 	statuses   []config.StatusDef
 	priorities []config.PriorityDef
 	width      int
@@ -42,7 +42,7 @@ const (
 )
 
 // NewEditView constructs an EditView with empty inputs.
-func NewEditView(theme config.ThemeConfig, statuses []config.StatusDef, priorities []config.PriorityDef) EditView {
+func NewEditView(s styles.Styles, statuses []config.StatusDef, priorities []config.PriorityDef) EditView {
 	ti := textinput.New()
 	ti.Placeholder = "Task title"
 	ti.Focus()
@@ -80,7 +80,7 @@ func NewEditView(theme config.ThemeConfig, statuses []config.StatusDef, prioriti
 		priorityIn: pi,
 		dueDateIn:  di,
 		tagsIn:     tgs,
-		theme:      theme,
+		styles:     s,
 		statuses:   statuses,
 		priorities: priorities,
 	}
@@ -179,9 +179,9 @@ func (m EditView) View() string {
 	if m.task != nil {
 		heading = "Edit Task"
 	}
-	title := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(m.theme.Primary)).Render(heading)
+	title := m.styles.LabelFocused.Render(heading)
 
-	hint := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Secondary)).
+	hint := m.styles.HintText.
 		Render("Tab to navigate  •  Enter/Ctrl+S to save  •  Esc to cancel")
 
 	fields := []string{
@@ -198,11 +198,9 @@ func (m EditView) View() string {
 // ---- helpers ----------------------------------------------------------------
 
 func (m EditView) fieldRow(label, input string, focused bool) string {
-	lStyle := lipgloss.NewStyle().Bold(true)
+	lStyle := m.styles.LabelUnfocused
 	if focused {
-		lStyle = lStyle.Foreground(lipgloss.Color(m.theme.Primary))
-	} else {
-		lStyle = lStyle.Foreground(lipgloss.Color(m.theme.TextMuted))
+		lStyle = m.styles.LabelFocused
 	}
 	// Indent all lines consistently (fixes multiline textarea alignment).
 	indented := "  " + strings.ReplaceAll(input, "\n", "\n  ")
