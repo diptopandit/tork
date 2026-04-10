@@ -37,8 +37,3 @@ build/
 ~/.tork/
 .env
 .env.local
-
-# Development
-tork
-taskcli
-tasktui
