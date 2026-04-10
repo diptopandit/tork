@@ -29,6 +29,8 @@ func defaults() Config {
 			Columns:        []string{"title", "status", "priority", "due_date"},
 			DateFormat:     "02-01-2006",
 			ShowTimestamps: true,
+			TabOrder:       []string{"todo", "in_progress", "done", "all"},
+			DefaultTab:     "todo",
 		},
 		Theme: ThemeConfig{
 			Primary:    "#7C3AED",

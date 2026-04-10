@@ -104,6 +104,8 @@ type Model struct {
 	contentHeight int
 	inputBoxH     int // right pane: input box total height
 	updatesH      int // right pane: updates viewport inner height (computed)
+
+	tabOrder []Tab // configurable tab display order
 }
 
 // NewModel assembles the root model.
@@ -127,6 +129,25 @@ func NewModel(
 		activeListID = cfg.DefaultList
 	}
 
+	// Resolve tab order from config
+	var tabOrder []Tab
+	for _, name := range cfg.Display.TabOrder {
+		if t, ok := TabFromString(name); ok {
+			tabOrder = append(tabOrder, t)
+		}
+	}
+	if len(tabOrder) == 0 {
+		tabOrder = []Tab{TabTodo, TabInProgress, TabDone, TabAll}
+	}
+
+	// Resolve default tab
+	defaultTab := tabOrder[0]
+	if cfg.Display.DefaultTab != "" {
+		if t, ok := TabFromString(cfg.Display.DefaultTab); ok {
+			defaultTab = t
+		}
+	}
+
 	return Model{
 		taskSvc:         taskSvc,
 		listSvc:         listSvc,
@@ -138,9 +159,10 @@ func NewModel(
 		editView:        views.NewEditView(cfg.Theme),
 		filterView:      views.NewFilterView(cfg.Theme),
 		listSwitchInput: lsInput,
+		tabOrder:        tabOrder,
 		state: AppState{
 			ActivePane:   PaneList,
-			ActiveTab:    TabAll,
+			ActiveTab:    defaultTab,
 			ActiveListID: activeListID,
 		},
 	}
@@ -440,6 +462,24 @@ func (m *Model) recalcLayout() {
 	m.filterView = m.filterView.SetSize(m.width*50/100, m.height*50/100)
 }
 
+func (m Model) nextTab() Tab {
+	for i, t := range m.tabOrder {
+		if t == m.state.ActiveTab {
+			return m.tabOrder[(i+1)%len(m.tabOrder)]
+		}
+	}
+	return m.tabOrder[0]
+}
+
+func (m Model) prevTab() Tab {
+	for i, t := range m.tabOrder {
+		if t == m.state.ActiveTab {
+			return m.tabOrder[(i-1+len(m.tabOrder))%len(m.tabOrder)]
+		}
+	}
+	return m.tabOrder[0]
+}
+
 func (m *Model) syncDetailToSelection() tea.Cmd {
 	if t := m.listView.SelectedTask(); t != nil {
 		m.state.SelectedTask = t
@@ -457,7 +497,7 @@ func (m Model) renderTabs() string {
 	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(m.cfg.Theme.Primary))
 	title := titleStyle.Render("tork")
 
-	tabs := []Tab{TabAll, TabTodo, TabInProgress, TabDone}
+	tabs := m.tabOrder
 	var parts []string
 	for _, t := range tabs {
 		label := t.String()
@@ -705,12 +745,12 @@ func (m Model) handleListKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case isKey(msg, m.keymap.Tab):
-		m.state.ActiveTab = Tab((int(m.state.ActiveTab) + 1) % TabCount)
+		m.state.ActiveTab = m.nextTab()
 		m.state.StatusMsg = ""
 		return m, m.loadTasks()
 
 	case isKey(msg, m.keymap.ShiftTab):
-		m.state.ActiveTab = Tab((int(m.state.ActiveTab) - 1 + TabCount) % TabCount)
+		m.state.ActiveTab = m.prevTab()
 		m.state.StatusMsg = ""
 		return m, m.loadTasks()
 

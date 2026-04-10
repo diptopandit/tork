@@ -18,7 +18,9 @@
   "display": {
     "columns": ["title", "status", "priority", "due_date"],
     "date_format": "02-01-2006",
-    "show_timestamps": true
+    "show_timestamps": true,
+    "tab_order": ["todo", "in_progress", "done", "all"],
+    "default_tab": "todo"
   },
   "theme": {
     "primary": "#7C3AED",

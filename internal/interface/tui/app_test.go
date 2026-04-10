@@ -55,8 +55,8 @@ func TestInitialState(t *testing.T) {
 	if m.state.ActivePane != PaneList {
 		t.Errorf("initial pane = %d, want PaneList", m.state.ActivePane)
 	}
-	if m.state.ActiveTab != TabAll {
-		t.Errorf("initial tab = %d, want TabAll", m.state.ActiveTab)
+	if m.state.ActiveTab != TabTodo {
+		t.Errorf("initial tab = %d, want TabTodo", m.state.ActiveTab)
 	}
 }
 
@@ -110,8 +110,8 @@ func TestTabCycleForward(t *testing.T) {
 	msg := tea.KeyMsg{Type: tea.KeyTab}
 	newModel, _ := m.Update(msg)
 	nm := newModel.(Model)
-	if nm.state.ActiveTab != TabTodo {
-		t.Errorf("tab = %d, want TabTodo after first Tab press", nm.state.ActiveTab)
+	if nm.state.ActiveTab != TabInProgress {
+		t.Errorf("tab = %d, want TabInProgress after first Tab press", nm.state.ActiveTab)
 	}
 }
 
@@ -124,8 +124,8 @@ func TestTabCycleBackward(t *testing.T) {
 	msg := tea.KeyMsg{Type: tea.KeyShiftTab}
 	newModel, _ := m.Update(msg)
 	nm := newModel.(Model)
-	if nm.state.ActiveTab != TabDone {
-		t.Errorf("tab = %d, want TabDone after Shift+Tab from TabAll", nm.state.ActiveTab)
+	if nm.state.ActiveTab != TabAll {
+		t.Errorf("tab = %d, want TabAll after Shift+Tab from TabTodo", nm.state.ActiveTab)
 	}
 }
 

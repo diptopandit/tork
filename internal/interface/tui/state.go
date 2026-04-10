@@ -34,6 +34,21 @@ func (t Tab) String() string {
 	return ""
 }
 
+// TabFromString converts a config string to a Tab constant.
+func TabFromString(s string) (Tab, bool) {
+	switch s {
+	case "all":
+		return TabAll, true
+	case "todo":
+		return TabTodo, true
+	case "in_progress":
+		return TabInProgress, true
+	case "done":
+		return TabDone, true
+	}
+	return TabAll, false
+}
+
 // TabCount is the number of defined tabs.
 const TabCount = 4
 

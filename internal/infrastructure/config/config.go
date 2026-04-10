@@ -27,6 +27,8 @@ type DisplayConfig struct {
 	Columns        []string `json:"columns"`
 	DateFormat     string   `json:"date_format"`
 	ShowTimestamps bool     `json:"show_timestamps"` // show created/updated in detail view
+	TabOrder       []string `json:"tab_order"`       // ordered tab names: "all", "todo", "in_progress", "done"
+	DefaultTab     string   `json:"default_tab"`     // tab selected on startup
 }
 
 // ThemeConfig holds lipgloss color references.
