@@ -1,6 +1,8 @@
 package views
 
 import (
+	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -24,6 +26,8 @@ type EditView struct {
 	task       *domain.Task // nil when creating a new task
 	savedTask  *domain.Task // non-nil when user pressed Enter/Ctrl+S
 	theme      config.ThemeConfig
+	statuses   []config.StatusDef
+	priorities []config.PriorityDef
 	width      int
 	height     int
 }
@@ -38,7 +42,7 @@ const (
 )
 
 // NewEditView constructs an EditView with empty inputs.
-func NewEditView(theme config.ThemeConfig) EditView {
+func NewEditView(theme config.ThemeConfig, statuses []config.StatusDef, priorities []config.PriorityDef) EditView {
 	ti := textinput.New()
 	ti.Placeholder = "Task title"
 	ti.Focus()
@@ -49,9 +53,18 @@ func NewEditView(theme config.ThemeConfig) EditView {
 	ta.CharLimit = 2000
 	ta.SetHeight(5)
 
+	// Build dynamic placeholder from configured priorities.
+	var priParts []string
+	for i, p := range priorities {
+		priParts = append(priParts, fmt.Sprintf("%d=%s", i+1, p.Name))
+	}
+	defIdx := len(priorities)/2 + 1
+	if defIdx < 1 {
+		defIdx = 1
+	}
 	pi := textinput.New()
-	pi.Placeholder = "1=low 2=medium 3=high 4=urgent  (default: 2)"
-	pi.CharLimit = 1
+	pi.Placeholder = fmt.Sprintf("%s  (default: %d)", strings.Join(priParts, " "), defIdx)
+	pi.CharLimit = 2
 
 	di := textinput.New()
 	di.Placeholder = "DD-MM-YYYY  (optional)"
@@ -68,6 +81,8 @@ func NewEditView(theme config.ThemeConfig) EditView {
 		dueDateIn:  di,
 		tagsIn:     tgs,
 		theme:      theme,
+		statuses:   statuses,
+		priorities: priorities,
 	}
 }
 
@@ -85,7 +100,15 @@ func (m EditView) SetTask(t *domain.Task) EditView {
 	if t != nil {
 		m.titleInput.SetValue(t.Title)
 		m.descInput.SetValue(t.Description)
-		m.priorityIn.SetValue(domain.Priority.String(t.Priority)[:1])
+		// Show the 1-indexed position of the task's priority in the config list.
+		priStr := "1"
+		for i, p := range m.priorities {
+			if p.Value == int(t.Priority) {
+				priStr = strconv.Itoa(i + 1)
+				break
+			}
+		}
+		m.priorityIn.SetValue(priStr)
 		if t.DueDate != nil {
 			m.dueDateIn.SetValue(t.DueDate.Format("02-01-2006"))
 		}
@@ -229,16 +252,14 @@ func (m EditView) submit() (EditView, tea.Cmd) {
 		return m, nil // silently ignore empty title
 	}
 
-	var priority domain.Priority
-	switch m.priorityIn.Value() {
-	case "1":
-		priority = domain.PriorityLow
-	case "3":
-		priority = domain.PriorityHigh
-	case "4":
-		priority = domain.PriorityUrgent
-	default:
-		priority = domain.PriorityMedium
+	// Resolve priority from config: accept 1-indexed number or name.
+	priority := domain.Priority(config.DefaultPriority(m.priorities))
+	if raw := strings.TrimSpace(m.priorityIn.Value()); raw != "" {
+		if v, ok := config.PriorityByName(m.priorities, raw); ok {
+			priority = domain.Priority(v)
+		} else if idx, err := strconv.Atoi(raw); err == nil && idx >= 1 && idx <= len(m.priorities) {
+			priority = domain.Priority(m.priorities[idx-1].Value)
+		}
 	}
 
 	var dueDate *time.Time
@@ -266,7 +287,7 @@ func (m EditView) submit() (EditView, tea.Cmd) {
 		Priority:    priority,
 		DueDate:     dueDate,
 		Tags:        tags,
-		Status:      domain.StatusTodo,
+		Status:      domain.Status(config.DefaultStatus(m.statuses)),
 	}
 	if m.task != nil {
 		saved.ID = m.task.ID

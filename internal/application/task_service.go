@@ -52,6 +52,9 @@ func (s *TaskService) CreateTask(in CreateTaskInput) (*domain.Task, error) {
 		CreatedAt:    now,
 		UpdatedAt:    now,
 	}
+	if in.Status != "" {
+		t.Status = in.Status
+	}
 	if t.Priority == 0 {
 		t.Priority = domain.PriorityMedium
 	}

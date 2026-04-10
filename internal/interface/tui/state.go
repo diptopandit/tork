@@ -1,6 +1,9 @@
 package tui
 
-import "github.com/diptopandit/tork/internal/domain"
+import (
+	"github.com/diptopandit/tork/internal/domain"
+	"github.com/diptopandit/tork/internal/infrastructure/config"
+)
 
 // Pane identifies which pane has keyboard focus.
 type Pane int
@@ -10,47 +13,31 @@ const (
 	PaneDetail             // right: task detail viewport
 )
 
-// Tab identifies which filter tab is active in the list pane.
-type Tab int
-
-const (
-	TabAll        Tab = iota // all tasks
-	TabTodo                  // status = todo
-	TabInProgress            // status = in_progress
-	TabDone                  // status = done
-)
-
-func (t Tab) String() string {
-	switch t {
-	case TabAll:
+// TabLabel returns a display label for a tab name using the config statuses.
+// "all" is always labelled "All".
+func TabLabel(defs []config.StatusDef, s string) string {
+	if s == "all" {
 		return "All"
-	case TabTodo:
-		return "Todo"
-	case TabInProgress:
-		return "In Progress"
-	case TabDone:
-		return "Done"
 	}
-	return ""
+	return config.StatusLabel(defs, s)
 }
 
-// TabFromString converts a config string to a Tab constant.
-func TabFromString(s string) (Tab, bool) {
-	switch s {
-	case "all":
-		return TabAll, true
-	case "todo":
-		return TabTodo, true
-	case "in_progress":
-		return TabInProgress, true
-	case "done":
-		return TabDone, true
+// TabStatus returns the domain.Status filter for a tab string.
+// Returns nil for "all" (no filter).
+func TabStatus(s string) []domain.Status {
+	if s == "all" {
+		return nil
 	}
-	return TabAll, false
+	return []domain.Status{domain.Status(s)}
 }
 
-// TabCount is the number of defined tabs.
-const TabCount = 4
+// ValidTab reports whether s is "all" or a defined status name.
+func ValidTab(defs []config.StatusDef, s string) bool {
+	if s == "all" {
+		return true
+	}
+	return config.ValidStatus(defs, s)
+}
 
 // Overlay identifies a modal that floats above the panes.
 type Overlay int
@@ -66,7 +53,7 @@ const (
 // AppState holds all mutable UI state in one place.
 type AppState struct {
 	ActivePane    Pane
-	ActiveTab     Tab
+	ActiveTab     int // index into Model.tabOrder
 	ActiveOverlay Overlay
 	ActiveListID  string // currently active task list filter
 	SelectedTask  *domain.Task

@@ -35,7 +35,7 @@ const (
 )
 
 // NewFilterView constructs a FilterView.
-func NewFilterView(theme config.ThemeConfig) FilterView {
+func NewFilterView(theme config.ThemeConfig, statuses []config.StatusDef, priorities []config.PriorityDef) FilterView {
 	si := textinput.New()
 	si.Placeholder = "Search..."
 	si.Focus()
@@ -49,23 +49,23 @@ func NewFilterView(theme config.ThemeConfig) FilterView {
 	ti.Placeholder = "Tags (comma-separated)"
 	ti.CharLimit = 200
 
+	smap := make(map[domain.Status]bool, len(statuses))
+	for _, s := range statuses {
+		smap[domain.Status(s.Name)] = false
+	}
+
+	pmap := make(map[domain.Priority]bool, len(priorities))
+	for _, p := range priorities {
+		pmap[domain.Priority(p.Value)] = false
+	}
+
 	return FilterView{
 		searchInput: si,
 		dueBefore:   di,
 		tagsInput:   ti,
 		theme:       theme,
-		statuses: map[domain.Status]bool{
-			domain.StatusTodo:       false,
-			domain.StatusInProgress: false,
-			domain.StatusDone:       false,
-			domain.StatusCancelled:  false,
-		},
-		priorities: map[domain.Priority]bool{
-			domain.PriorityLow:    false,
-			domain.PriorityMedium: false,
-			domain.PriorityHigh:   false,
-			domain.PriorityUrgent: false,
-		},
+		statuses:    smap,
+		priorities:  pmap,
 	}
 }
 

@@ -9,10 +9,11 @@ import (
 
 	"github.com/diptopandit/tork/internal/application"
 	"github.com/diptopandit/tork/internal/domain"
+	"github.com/diptopandit/tork/internal/infrastructure/config"
 )
 
 // NewRootCmd builds the Cobra root command wired to the given services.
-func NewRootCmd(taskSvc *application.TaskService, listSvc *application.ListService) *cobra.Command {
+func NewRootCmd(taskSvc *application.TaskService, listSvc *application.ListService, cfg *config.Config) *cobra.Command {
 	root := &cobra.Command{
 		Use:   "tork",
 		Short: "Terminal task manager",
@@ -20,12 +21,12 @@ func NewRootCmd(taskSvc *application.TaskService, listSvc *application.ListServi
 	}
 
 	root.AddCommand(
-		newAddCmd(taskSvc, listSvc),
-		newListCmd(taskSvc),
-		newShowCmd(taskSvc),
-		newEditCmd(taskSvc),
-		newStatusCmd(taskSvc),
-		newDoneCmd(taskSvc),
+		newAddCmd(taskSvc, listSvc, cfg),
+		newListCmd(taskSvc, cfg),
+		newShowCmd(taskSvc, cfg),
+		newEditCmd(taskSvc, cfg),
+		newStatusCmd(taskSvc, cfg),
+		newDoneCmd(taskSvc, cfg),
 		newDeleteCmd(taskSvc),
 		newSearchCmd(taskSvc),
 		newUpdateCmd(taskSvc),
@@ -39,7 +40,7 @@ func NewRootCmd(taskSvc *application.TaskService, listSvc *application.ListServi
 
 // ── add ──────────────────────────────────────────────────────────────────────
 
-func newAddCmd(taskSvc *application.TaskService, listSvc *application.ListService) *cobra.Command {
+func newAddCmd(taskSvc *application.TaskService, listSvc *application.ListService, cfg *config.Config) *cobra.Command {
 	var (
 		listName    string
 		priority    string
@@ -91,7 +92,7 @@ func newAddCmd(taskSvc *application.TaskService, listSvc *application.ListServic
 				}
 			}
 
-			pri, err := ParsePriority(priority)
+			pri, err := ParsePriority(cfg.Priorities, priority)
 			if err != nil {
 				return err
 			}
@@ -113,6 +114,7 @@ func newAddCmd(taskSvc *application.TaskService, listSvc *application.ListServic
 				ListID:      listID,
 				Title:       title,
 				Description: description,
+				Status:      domain.Status(config.DefaultStatus(cfg.Statuses)),
 				Priority:    pri,
 				DueDate:     due,
 				Tags:        tagList,
@@ -125,8 +127,12 @@ func newAddCmd(taskSvc *application.TaskService, listSvc *application.ListServic
 		},
 	}
 
+	priNames := make([]string, len(cfg.Priorities))
+	for i, p := range cfg.Priorities {
+		priNames[i] = p.Name
+	}
 	cmd.Flags().StringVarP(&listName, "list", "l", "", "list name")
-	cmd.Flags().StringVarP(&priority, "priority", "p", "medium", "priority (low/medium/high/urgent)")
+	cmd.Flags().StringVarP(&priority, "priority", "p", "", "priority ("+strings.Join(priNames, "/")+")")
 	cmd.Flags().StringVarP(&dueDate, "due", "d", "", "due date DD-MM-YYYY or YYYY-MM-DD")
 	cmd.Flags().StringVarP(&tags, "tags", "t", "", "comma-separated tags")
 	cmd.Flags().StringVarP(&description, "description", "D", "", "task description")
@@ -135,7 +141,7 @@ func newAddCmd(taskSvc *application.TaskService, listSvc *application.ListServic
 
 // ── list ─────────────────────────────────────────────────────────────────────
 
-func newListCmd(taskSvc *application.TaskService) *cobra.Command {
+func newListCmd(taskSvc *application.TaskService, cfg *config.Config) *cobra.Command {
 	var (
 		statusFlag   string
 		priorityFlag string
@@ -151,14 +157,14 @@ func newListCmd(taskSvc *application.TaskService) *cobra.Command {
 				b.WithLists(listID)
 			}
 			if statusFlag != "" {
-				s, err := ParseStatus(statusFlag)
+				s, err := ParseStatus(cfg.Statuses, statusFlag)
 				if err != nil {
 					return err
 				}
 				b.WithStatuses(s)
 			}
 			if priorityFlag != "" {
-				p, err := ParsePriority(priorityFlag)
+				p, err := ParsePriority(cfg.Priorities, priorityFlag)
 				if err != nil {
 					return err
 				}
@@ -179,7 +185,7 @@ func newListCmd(taskSvc *application.TaskService) *cobra.Command {
 					due = " due:" + t.DueDate.Format("2006-01-02")
 				}
 				fmt.Printf("#%-4d %-8s %-8s %s%s\n",
-					t.NumID, string(t.Status), t.Priority.String(), t.Title, due)
+					t.NumID, string(t.Status), config.PriorityLabel(cfg.Priorities, int(t.Priority)), t.Title, due)
 			}
 			return nil
 		},
@@ -193,7 +199,7 @@ func newListCmd(taskSvc *application.TaskService) *cobra.Command {
 
 // ── done ─────────────────────────────────────────────────────────────────────
 
-func newDoneCmd(taskSvc *application.TaskService) *cobra.Command {
+func newDoneCmd(taskSvc *application.TaskService, cfg *config.Config) *cobra.Command {
 	return &cobra.Command{
 		Use:   "done <id>",
 		Short: "Mark a task as done",
@@ -203,7 +209,13 @@ func newDoneCmd(taskSvc *application.TaskService) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			st := domain.StatusDone
+			// Use third configured status as "done", or fallback.
+			var st domain.Status
+			if len(cfg.Statuses) >= 3 {
+				st = domain.Status(cfg.Statuses[2].Name)
+			} else {
+				st = domain.StatusDone
+			}
 			_, err = taskSvc.UpdateTask(application.UpdateTaskInput{
 				ID:     id,
 				Status: &st,
@@ -265,7 +277,7 @@ func newSearchCmd(taskSvc *application.TaskService) *cobra.Command {
 
 // ── show ─────────────────────────────────────────────────────────────────────
 
-func newShowCmd(taskSvc *application.TaskService) *cobra.Command {
+func newShowCmd(taskSvc *application.TaskService, cfg *config.Config) *cobra.Command {
 	return &cobra.Command{
 		Use:   "show <id>",
 		Short: "Show full task details",
@@ -283,7 +295,7 @@ func newShowCmd(taskSvc *application.TaskService) *cobra.Command {
 			fmt.Printf("NumID:       #%d\n", t.NumID)
 			fmt.Printf("Title:       %s\n", t.Title)
 			fmt.Printf("Status:      %s\n", t.Status)
-			fmt.Printf("Priority:    %s\n", t.Priority.String())
+			fmt.Printf("Priority:    %s\n", config.PriorityLabel(cfg.Priorities, int(t.Priority)))
 			if t.Description != "" {
 				fmt.Printf("Description: %s\n", t.Description)
 			}
@@ -310,7 +322,7 @@ func newShowCmd(taskSvc *application.TaskService) *cobra.Command {
 
 // ── edit ─────────────────────────────────────────────────────────────────────
 
-func newEditCmd(taskSvc *application.TaskService) *cobra.Command {
+func newEditCmd(taskSvc *application.TaskService, cfg *config.Config) *cobra.Command {
 	var (
 		title       string
 		description string
@@ -338,14 +350,14 @@ func newEditCmd(taskSvc *application.TaskService) *cobra.Command {
 				in.Description = &description
 			}
 			if cmd.Flags().Changed("status") {
-				s, err := ParseStatus(status)
+				s, err := ParseStatus(cfg.Statuses, status)
 				if err != nil {
 					return err
 				}
 				in.Status = &s
 			}
 			if cmd.Flags().Changed("priority") {
-				p, err := ParsePriority(priority)
+				p, err := ParsePriority(cfg.Priorities, priority)
 				if err != nil {
 					return err
 				}
@@ -377,10 +389,15 @@ func newEditCmd(taskSvc *application.TaskService) *cobra.Command {
 		},
 	}
 
+	statusNames := config.StatusNames(cfg.Statuses)
+	priNames2 := make([]string, len(cfg.Priorities))
+	for i, p := range cfg.Priorities {
+		priNames2[i] = p.Name
+	}
 	cmd.Flags().StringVar(&title, "title", "", "new title")
 	cmd.Flags().StringVarP(&description, "description", "D", "", "new description")
-	cmd.Flags().StringVarP(&status, "status", "s", "", "new status (todo/in_progress/done/cancelled)")
-	cmd.Flags().StringVarP(&priority, "priority", "p", "", "new priority (low/medium/high/urgent)")
+	cmd.Flags().StringVarP(&status, "status", "s", "", "new status ("+strings.Join(statusNames, "/")+")")
+	cmd.Flags().StringVarP(&priority, "priority", "p", "", "new priority ("+strings.Join(priNames2, "/")+")")
 	cmd.Flags().StringVarP(&dueDate, "due", "d", "", "new due date DD-MM-YYYY or YYYY-MM-DD")
 	cmd.Flags().StringVarP(&tags, "tags", "t", "", "new comma-separated tags")
 	return cmd
@@ -388,17 +405,18 @@ func newEditCmd(taskSvc *application.TaskService) *cobra.Command {
 
 // ── status ───────────────────────────────────────────────────────────────────
 
-func newStatusCmd(taskSvc *application.TaskService) *cobra.Command {
+func newStatusCmd(taskSvc *application.TaskService, cfg *config.Config) *cobra.Command {
+	statusNames := config.StatusNames(cfg.Statuses)
 	return &cobra.Command{
 		Use:   "status <id> <status>",
-		Short: "Change task status (todo/in_progress/done/cancelled)",
+		Short: "Change task status (" + strings.Join(statusNames, "/") + ")",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id, err := resolveTaskID(taskSvc, args[0])
 			if err != nil {
 				return err
 			}
-			s, err := ParseStatus(args[1])
+			s, err := ParseStatus(cfg.Statuses, args[1])
 			if err != nil {
 				return err
 			}

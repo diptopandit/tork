@@ -35,6 +35,18 @@
     "text_bright": "#FFFFFF",
     "accent": "#60A5FA"
   },
+  "statuses": [
+    { "name": "todo", "label": "Todo" },
+    { "name": "in_progress", "label": "In Progress" },
+    { "name": "done", "label": "Done" },
+    { "name": "cancelled", "label": "Cancelled" }
+  ],
+  "priorities": [
+    { "name": "low", "value": 1, "label": "Low" },
+    { "name": "medium", "value": 2, "label": "Medium" },
+    { "name": "high", "value": 3, "label": "High" },
+    { "name": "urgent", "value": 4, "label": "Urgent" }
+  ],
   "default_list": "",
   "last_list": ""
 }

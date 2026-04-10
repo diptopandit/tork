@@ -25,6 +25,7 @@ type UpdateSubmittedMsg struct {
 type DetailView struct {
 	cfg        config.DisplayConfig
 	theme      config.ThemeConfig
+	priorities []config.PriorityDef
 	task       *domain.Task
 	updates    viewport.Model
 	input      textarea.Model
@@ -33,7 +34,7 @@ type DetailView struct {
 }
 
 // NewDetailView constructs a DetailView.
-func NewDetailView(cfg config.DisplayConfig, theme config.ThemeConfig) DetailView {
+func NewDetailView(cfg config.DisplayConfig, theme config.ThemeConfig, priorities []config.PriorityDef) DetailView {
 	vp := viewport.New(80, 10)
 
 	ta := textarea.New()
@@ -43,10 +44,11 @@ func NewDetailView(cfg config.DisplayConfig, theme config.ThemeConfig) DetailVie
 	ta.Blur()
 
 	return DetailView{
-		cfg:     cfg,
-		theme:   theme,
-		updates: vp,
-		input:   ta,
+		cfg:        cfg,
+		theme:      theme,
+		priorities: priorities,
+		updates:    vp,
+		input:      ta,
 	}
 }
 
@@ -178,7 +180,7 @@ func (m DetailView) renderDetails(t *domain.Task) string {
 	sb.WriteString(leftCol.Render(statusCell) + createdCell + "\n")
 
 	// Line 3: Priority | Modified
-	priCell := labelStyle.Render("Priority: ") + valueStyle.Render(t.Priority.String())
+	priCell := labelStyle.Render("Priority: ") + valueStyle.Render(config.PriorityLabel(m.priorities, int(t.Priority)))
 	modifiedCell := ""
 	if m.cfg.ShowTimestamps {
 		modifiedCell = labelStyle.Render("Modified: ") + valueStyle.Render(t.UpdatedAt.Format(m.cfg.DateFormat+" 15:04"))

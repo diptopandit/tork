@@ -11,6 +11,7 @@ type CreateTaskInput struct {
 	ListID       string
 	Title        string
 	Description  string
+	Status       domain.Status // empty = service default
 	Priority     domain.Priority
 	DueDate      *time.Time
 	Tags         []string

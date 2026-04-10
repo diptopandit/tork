@@ -45,6 +45,18 @@ func defaults() Config {
 			TextBright: "#FFFFFF",
 			Accent:     "#60A5FA",
 		},
+		Statuses: []StatusDef{
+			{Name: "todo", Label: "Todo"},
+			{Name: "in_progress", Label: "In Progress"},
+			{Name: "done", Label: "Done"},
+			{Name: "cancelled", Label: "Cancelled"},
+		},
+		Priorities: []PriorityDef{
+			{Name: "low", Value: 1, Label: "Low"},
+			{Name: "medium", Value: 2, Label: "Medium"},
+			{Name: "high", Value: 3, Label: "High"},
+			{Name: "urgent", Value: 4, Label: "Urgent"},
+		},
 	}
 }
 

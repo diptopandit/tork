@@ -42,7 +42,40 @@ func (s *stubListRepo) GetAll() ([]domain.TaskList, error)       { return nil, n
 func (s *stubListRepo) Delete(string) error                      { return nil }
 
 func newTestModel() Model {
-	cfg, _ := config.Load()
+	cfg := &config.Config{
+		Keybindings: config.KeyMap{
+			Up: "k", Down: "j", Left: "h", Right: "l",
+			Select: "enter", Quit: "q", Help: "?",
+			New: "n", Edit: "e", Delete: "d", Search: "/",
+			Done: "x", Status: "s",
+		},
+		Display: config.DisplayConfig{
+			Columns:        []string{"title", "status", "priority", "due_date"},
+			DateFormat:     "02-01-2006",
+			ShowTimestamps: true,
+			TabOrder:       []string{"todo", "in_progress", "done", "all"},
+			DefaultTab:     "todo",
+		},
+		Theme: config.ThemeConfig{
+			Primary: "#7C3AED", Secondary: "#6B7280",
+			Active: "#7C3AED", Inactive: "#374151",
+			Success: "#10B981", Warning: "#F59E0B", Danger: "#EF4444",
+			Text: "#E5E7EB", TextMuted: "#9CA3AF",
+			TextBright: "#FFFFFF", Accent: "#60A5FA",
+		},
+		Statuses: []config.StatusDef{
+			{Name: "todo", Label: "Todo"},
+			{Name: "in_progress", Label: "In Progress"},
+			{Name: "done", Label: "Done"},
+			{Name: "cancelled", Label: "Cancelled"},
+		},
+		Priorities: []config.PriorityDef{
+			{Name: "low", Value: 1, Label: "Low"},
+			{Name: "medium", Value: 2, Label: "Medium"},
+			{Name: "high", Value: 3, Label: "High"},
+			{Name: "urgent", Value: 4, Label: "Urgent"},
+		},
+	}
 	taskSvc := application.NewTaskService(&stubTaskRepo{}, &stubUpdateRepo{}, &stubSearch{})
 	listSvc := application.NewListService(&stubListRepo{})
 	return NewModel(taskSvc, listSvc, cfg)
@@ -55,8 +88,8 @@ func TestInitialState(t *testing.T) {
 	if m.state.ActivePane != PaneList {
 		t.Errorf("initial pane = %d, want PaneList", m.state.ActivePane)
 	}
-	if m.state.ActiveTab != TabTodo {
-		t.Errorf("initial tab = %d, want TabTodo", m.state.ActiveTab)
+	if m.state.ActiveTab != 0 {
+		t.Errorf("initial tab = %d, want 0 (todo)", m.state.ActiveTab)
 	}
 }
 
@@ -110,8 +143,8 @@ func TestTabCycleForward(t *testing.T) {
 	msg := tea.KeyMsg{Type: tea.KeyTab}
 	newModel, _ := m.Update(msg)
 	nm := newModel.(Model)
-	if nm.state.ActiveTab != TabInProgress {
-		t.Errorf("tab = %d, want TabInProgress after first Tab press", nm.state.ActiveTab)
+	if nm.state.ActiveTab != 1 {
+		t.Errorf("tab = %d, want 1 (in_progress) after first Tab press", nm.state.ActiveTab)
 	}
 }
 
@@ -124,8 +157,8 @@ func TestTabCycleBackward(t *testing.T) {
 	msg := tea.KeyMsg{Type: tea.KeyShiftTab}
 	newModel, _ := m.Update(msg)
 	nm := newModel.(Model)
-	if nm.state.ActiveTab != TabAll {
-		t.Errorf("tab = %d, want TabAll after Shift+Tab from TabTodo", nm.state.ActiveTab)
+	if nm.state.ActiveTab != 3 {
+		t.Errorf("tab = %d, want 3 (all) after Shift+Tab from todo", nm.state.ActiveTab)
 	}
 }
 

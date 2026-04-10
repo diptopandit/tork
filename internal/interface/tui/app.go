@@ -105,7 +105,7 @@ type Model struct {
 	inputBoxH     int // right pane: input box total height
 	updatesH      int // right pane: updates viewport inner height (computed)
 
-	tabOrder []Tab // configurable tab display order
+	tabOrder []string // configurable tab names (status strings + "all")
 }
 
 // NewModel assembles the root model.
@@ -130,21 +130,28 @@ func NewModel(
 	}
 
 	// Resolve tab order from config
-	var tabOrder []Tab
+	var tabOrder []string
 	for _, name := range cfg.Display.TabOrder {
-		if t, ok := TabFromString(name); ok {
-			tabOrder = append(tabOrder, t)
+		if ValidTab(cfg.Statuses, name) {
+			tabOrder = append(tabOrder, name)
 		}
 	}
 	if len(tabOrder) == 0 {
-		tabOrder = []Tab{TabTodo, TabInProgress, TabDone, TabAll}
+		// Default: all configured statuses + "all"
+		for _, s := range cfg.Statuses {
+			tabOrder = append(tabOrder, s.Name)
+		}
+		tabOrder = append(tabOrder, "all")
 	}
 
-	// Resolve default tab
-	defaultTab := tabOrder[0]
+	// Resolve default tab index
+	defaultTabIdx := 0
 	if cfg.Display.DefaultTab != "" {
-		if t, ok := TabFromString(cfg.Display.DefaultTab); ok {
-			defaultTab = t
+		for i, name := range tabOrder {
+			if name == cfg.Display.DefaultTab {
+				defaultTabIdx = i
+				break
+			}
 		}
 	}
 
@@ -154,15 +161,15 @@ func NewModel(
 		cfg:             cfg,
 		keymap:          km,
 		help:            h,
-		listView:        views.NewListView(cfg.Display, cfg.Theme),
-		detailView:      views.NewDetailView(cfg.Display, cfg.Theme),
-		editView:        views.NewEditView(cfg.Theme),
-		filterView:      views.NewFilterView(cfg.Theme),
+		listView:        views.NewListView(cfg.Display, cfg.Theme, cfg.Priorities),
+		detailView:      views.NewDetailView(cfg.Display, cfg.Theme, cfg.Priorities),
+		editView:        views.NewEditView(cfg.Theme, cfg.Statuses, cfg.Priorities),
+		filterView:      views.NewFilterView(cfg.Theme, cfg.Statuses, cfg.Priorities),
 		listSwitchInput: lsInput,
 		tabOrder:        tabOrder,
 		state: AppState{
 			ActivePane:   PaneList,
-			ActiveTab:    defaultTab,
+			ActiveTab:    defaultTabIdx,
 			ActiveListID: activeListID,
 		},
 	}
@@ -462,22 +469,12 @@ func (m *Model) recalcLayout() {
 	m.filterView = m.filterView.SetSize(m.width*50/100, m.height*50/100)
 }
 
-func (m Model) nextTab() Tab {
-	for i, t := range m.tabOrder {
-		if t == m.state.ActiveTab {
-			return m.tabOrder[(i+1)%len(m.tabOrder)]
-		}
-	}
-	return m.tabOrder[0]
+func (m Model) nextTab() int {
+	return (m.state.ActiveTab + 1) % len(m.tabOrder)
 }
 
-func (m Model) prevTab() Tab {
-	for i, t := range m.tabOrder {
-		if t == m.state.ActiveTab {
-			return m.tabOrder[(i-1+len(m.tabOrder))%len(m.tabOrder)]
-		}
-	}
-	return m.tabOrder[0]
+func (m Model) prevTab() int {
+	return (m.state.ActiveTab - 1 + len(m.tabOrder)) % len(m.tabOrder)
 }
 
 func (m *Model) syncDetailToSelection() tea.Cmd {
@@ -499,9 +496,9 @@ func (m Model) renderTabs() string {
 
 	tabs := m.tabOrder
 	var parts []string
-	for _, t := range tabs {
-		label := t.String()
-		if t == m.state.ActiveTab {
+	for i, name := range tabs {
+		label := TabLabel(m.cfg.Statuses, name)
+		if i == m.state.ActiveTab {
 			style := lipgloss.NewStyle().
 				Bold(true).
 				Foreground(lipgloss.Color(m.cfg.Theme.TextBright)).
@@ -695,7 +692,7 @@ func (m Model) renderHelpOverlay() string {
 	for _, bind := range []struct{ k, desc string }{
 		{"n", "New task"},
 		{"e", "Edit task"},
-		{"s", "Cycle status (todo→in_progress→done→cancelled)"},
+		{"s", "Cycle status"},
 		{"x", "Mark done"},
 		{"d", "Delete task"},
 		{"u", "Add update (enter to submit)"},
@@ -940,14 +937,9 @@ func (m Model) loadTasks() tea.Cmd {
 	if m.state.ActiveListID != "" {
 		f.ListIDs = []string{m.state.ActiveListID}
 	}
-	switch m.state.ActiveTab {
-	case TabTodo:
-		f.Statuses = []domain.Status{domain.StatusTodo}
-	case TabInProgress:
-		f.Statuses = []domain.Status{domain.StatusInProgress}
-	case TabDone:
-		f.Statuses = []domain.Status{domain.StatusDone}
-	default:
+	if m.state.ActiveTab >= 0 && m.state.ActiveTab < len(m.tabOrder) {
+		f.Statuses = TabStatus(m.tabOrder[m.state.ActiveTab])
+	} else {
 		f.Statuses = nil
 	}
 	return m.loadTasksWithFilter(f)
@@ -987,11 +979,17 @@ func (m Model) deleteTask(id string) tea.Cmd {
 
 func (m Model) markDone(t *domain.Task) tea.Cmd {
 	svc := m.taskSvc
-	status := domain.StatusDone
+	// Use the third status in config as "done", or fall back to domain const.
+	var doneStatus domain.Status
+	if len(m.cfg.Statuses) >= 3 {
+		doneStatus = domain.Status(m.cfg.Statuses[2].Name)
+	} else {
+		doneStatus = domain.StatusDone
+	}
 	return func() tea.Msg {
 		updated, err := svc.UpdateTask(application.UpdateTaskInput{
 			ID:     t.ID,
-			Status: &status,
+			Status: &doneStatus,
 		})
 		return taskUpdatedMsg{task: updated, err: err}
 	}
@@ -999,13 +997,15 @@ func (m Model) markDone(t *domain.Task) tea.Cmd {
 
 func (m Model) cycleStatus(t *domain.Task) tea.Cmd {
 	svc := m.taskSvc
-	order := []domain.Status{
-		domain.StatusTodo,
-		domain.StatusInProgress,
-		domain.StatusDone,
-		domain.StatusCancelled,
+	// Build status order from config.
+	var order []domain.Status
+	for _, s := range m.cfg.Statuses {
+		order = append(order, domain.Status(s.Name))
 	}
-	next := domain.StatusTodo
+	if len(order) == 0 {
+		order = []domain.Status{domain.StatusTodo, domain.StatusInProgress, domain.StatusDone, domain.StatusCancelled}
+	}
+	next := order[0]
 	for i, s := range order {
 		if s == t.Status {
 			next = order[(i+1)%len(order)]
@@ -1028,6 +1028,7 @@ func (m Model) createTask(t *domain.Task, listID string) tea.Cmd {
 			ListID:      listID,
 			Title:       t.Title,
 			Description: t.Description,
+			Status:      t.Status,
 			Priority:    t.Priority,
 			DueDate:     t.DueDate,
 			Tags:        t.Tags,

@@ -41,13 +41,13 @@ tork is built for engineers who want a local-first task manager that is:
 ## Features
 
 - **Split-pane TUI** — left pane: task list table, right pane: task detail + scrollable updates + inline input
-- **Task lifecycle** — cycle through statuses: `todo` → `in_progress` → `done` → `cancelled`
-- **Priority levels** — low, medium, high, urgent
+- **Task lifecycle** — configurable statuses (default: `todo` → `in_progress` → `done` → `cancelled`)
+- **Priority levels** — configurable priorities (default: low, medium, high, urgent)
 - **Task metadata** — description, due date, tags, dependencies, numeric short IDs
 - **Task updates** — immutable timestamped comments on any task (press `u` to add)
 - **Task lists** — create, rename, delete, and switch between multiple task lists
 - **Full-text search** — powered by SQLite FTS5
-- **Configurable** — keybindings, date format, theme colors, display columns
+- **Configurable** — keybindings, date format, theme colors, display columns, statuses, priorities
 - **Offline-first** — all data stored locally in SQLite
 
 ## Installation
@@ -154,7 +154,7 @@ Date format: DD-MM-YYYY (default) or YYYY-MM-DD (both accepted).
 |-----|--------|
 | `n` | New task |
 | `e` | Edit task |
-| `s` | Cycle status (todo → in_progress → done → cancelled) |
+| `s` | Cycle status (follows configured order) |
 | `x` | Mark done |
 | `d` | Delete task |
 | `u` | Add update (Enter to submit, Esc to cancel) |
@@ -224,6 +224,18 @@ Config example:
     "text_bright": "#FFFFFF",
     "accent": "#60A5FA"
   },
+  "statuses": [
+    { "name": "todo", "label": "Todo" },
+    { "name": "in_progress", "label": "In Progress" },
+    { "name": "done", "label": "Done" },
+    { "name": "cancelled", "label": "Cancelled" }
+  ],
+  "priorities": [
+    { "name": "low", "value": 1, "label": "Low" },
+    { "name": "medium", "value": 2, "label": "Medium" },
+    { "name": "high", "value": 3, "label": "High" },
+    { "name": "urgent", "value": 4, "label": "Urgent" }
+  ],
   "default_list": "",
   "last_list": ""
 }
@@ -232,6 +244,18 @@ Config example:
 ### Date Format
 
 The default date format is DD-MM-YYYY (`02-01-2006` in Go reference time). This is used throughout the TUI for display and input. Both DD-MM-YYYY and YYYY-MM-DD are accepted as input in the CLI and edit modal.
+
+### Tab Order
+
+`tab_order` controls which status tabs appear in the TUI header and their order. Valid values: `all` plus any names from the `statuses` array. `default_tab` sets which tab is selected on startup.
+
+### Custom Statuses
+
+Define your own statuses in the `statuses` array. Each entry has a `name` (stored in DB) and a `label` (displayed in TUI). The first status is used as the default for new tasks. The `s` key cycles through statuses in configured order. Tab order references these names.
+
+### Custom Priorities
+
+Define your own priorities in the `priorities` array. Each entry has a `name` (used in CLI), a numeric `value` (stored in DB, used for sorting), and a `label` (displayed in TUI). In the edit modal, enter the 1-indexed position (e.g., `1` for the first priority).
 
 ## Roadmap
 

@@ -8,6 +8,7 @@ import (
 
 	"github.com/diptopandit/tork/internal/application"
 	"github.com/diptopandit/tork/internal/domain"
+	"github.com/diptopandit/tork/internal/infrastructure/config"
 )
 
 // resolveTaskID accepts a numeric ID (optionally prefixed with #) or a UUID
@@ -24,37 +25,39 @@ func resolveTaskID(taskSvc *application.TaskService, raw string) (string, error)
 	return raw, nil
 }
 
-// ParsePriority converts a string ("low", "medium", "high", "urgent", or "1"-"4")
-// to a domain.Priority.
-func ParsePriority(s string) (domain.Priority, error) {
-	switch s {
-	case "1", "low":
-		return domain.PriorityLow, nil
-	case "2", "medium", "":
-		return domain.PriorityMedium, nil
-	case "3", "high":
-		return domain.PriorityHigh, nil
-	case "4", "urgent":
-		return domain.PriorityUrgent, nil
-	default:
-		return 0, fmt.Errorf("unknown priority %q (use low/medium/high/urgent)", s)
+// ParsePriority converts a string (name or 1-indexed position) to a domain.Priority
+// using the configured priority definitions.
+func ParsePriority(defs []config.PriorityDef, s string) (domain.Priority, error) {
+	if s == "" {
+		return domain.Priority(config.DefaultPriority(defs)), nil
 	}
+	// Try name match first.
+	if v, ok := config.PriorityByName(defs, s); ok {
+		return domain.Priority(v), nil
+	}
+	// Try as a 1-indexed position.
+	if idx, err := strconv.Atoi(s); err == nil && idx >= 1 && idx <= len(defs) {
+		return domain.Priority(defs[idx-1].Value), nil
+	}
+	names := make([]string, len(defs))
+	for i, d := range defs {
+		names[i] = d.Name
+	}
+	return 0, fmt.Errorf("unknown priority %q (use %s)", s, strings.Join(names, "/"))
 }
 
-// ParseStatus converts a string to a domain.Status.
-func ParseStatus(s string) (domain.Status, error) {
-	switch s {
-	case "todo":
-		return domain.StatusTodo, nil
-	case "in_progress", "in-progress":
-		return domain.StatusInProgress, nil
-	case "done":
-		return domain.StatusDone, nil
-	case "cancelled":
-		return domain.StatusCancelled, nil
-	default:
-		return "", fmt.Errorf("unknown status %q (use todo/in_progress/done/cancelled)", s)
+// ParseStatus converts a string to a domain.Status using the configured status definitions.
+func ParseStatus(defs []config.StatusDef, s string) (domain.Status, error) {
+	if config.ValidStatus(defs, s) {
+		return domain.Status(s), nil
 	}
+	// Also accept dash-separated form (in-progress → in_progress).
+	alt := strings.ReplaceAll(s, "-", "_")
+	if config.ValidStatus(defs, alt) {
+		return domain.Status(alt), nil
+	}
+	names := config.StatusNames(defs)
+	return "", fmt.Errorf("unknown status %q (use %s)", s, strings.Join(names, "/"))
 }
 
 // ParseDate parses a date string in DD-MM-YYYY or YYYY-MM-DD format into a *time.Time.

@@ -16,6 +16,7 @@ type ListView struct {
 	table       table.Model
 	cfg         config.DisplayConfig
 	theme       config.ThemeConfig
+	priorities  []config.PriorityDef
 	tasks       []domain.Task
 	width       int
 	height      int
@@ -24,7 +25,7 @@ type ListView struct {
 }
 
 // NewListView constructs a ListView.
-func NewListView(cfg config.DisplayConfig, theme config.ThemeConfig) ListView {
+func NewListView(cfg config.DisplayConfig, theme config.ThemeConfig, priorities []config.PriorityDef) ListView {
 	activeStyle := table.DefaultStyles()
 	activeStyle.Cell = activeStyle.Cell.Padding(0, 0)
 	activeStyle.Header = lipgloss.NewStyle().
@@ -66,6 +67,7 @@ func NewListView(cfg config.DisplayConfig, theme config.ThemeConfig) ListView {
 		table:       t,
 		cfg:         cfg,
 		theme:       theme,
+		priorities:  priorities,
 		activeStyle: activeStyle,
 		inactStyle:  inactStyle,
 	}
@@ -86,7 +88,7 @@ func (m ListView) SetActive(active bool) ListView {
 // SetTasks replaces the displayed tasks.
 func (m ListView) SetTasks(tasks []domain.Task) ListView {
 	m.tasks = tasks
-	m.table.SetRows(tasksToRows(tasks, m.cfg))
+	m.table.SetRows(tasksToRows(tasks, m.cfg, m.priorities))
 	return m
 }
 
@@ -188,7 +190,7 @@ func buildColumns(cols []string, totalWidth int) []table.Column {
 	return colDefs
 }
 
-func tasksToRows(tasks []domain.Task, cfg config.DisplayConfig) []table.Row {
+func tasksToRows(tasks []domain.Task, cfg config.DisplayConfig, priorities []config.PriorityDef) []table.Row {
 	rows := make([]table.Row, len(tasks))
 	for i, t := range tasks {
 		row := table.Row{fmt.Sprintf("%d", t.NumID)}
@@ -199,7 +201,7 @@ func tasksToRows(tasks []domain.Task, cfg config.DisplayConfig) []table.Row {
 			case "status":
 				row = append(row, string(t.Status))
 			case "priority":
-				row = append(row, t.Priority.String())
+				row = append(row, config.PriorityLabel(priorities, int(t.Priority)))
 			case "due_date":
 				if t.DueDate != nil {
 					row = append(row, t.DueDate.Format("2006-01-02"))

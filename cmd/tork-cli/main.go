@@ -44,7 +44,7 @@ func main() {
 	taskSvc := application.NewTaskService(taskRepo, updateRepo, ftsSvc)
 	listSvc := application.NewListService(listRepo)
 
-	root := cli.NewRootCmd(taskSvc, listSvc)
+	root := cli.NewRootCmd(taskSvc, listSvc, cfg)
 	if err := root.Execute(); err != nil {
 		os.Exit(1)
 	}
