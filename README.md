@@ -165,6 +165,7 @@ Date format: DD-MM-YYYY (default) or YYYY-MM-DD (both accepted).
 | Key | Action |
 |-----|--------|
 | `L` | Open task list switcher (n: new, r: rename, d: delete) |
+| `T` | Open theme picker (live preview, Enter to apply, Esc to revert) |
 | `/` | Search / filter |
 | `?` | Toggle keybinding help |
 | `q` / `Ctrl+C` | Quit |
@@ -248,7 +249,7 @@ Define your own priorities in the `priorities` array. Each entry has a `name` (u
 
 ### Themes
 
-tork supports named themes. Set the `"theme"` field in config.json to one of the built-in theme names or the name of a custom theme file.
+tork supports named themes. Set the `"theme"` field in config.json to one of the built-in theme names or the name of a custom theme file. You can also press `T` in the TUI to open the **theme picker** — browse all themes with live preview, press Enter to apply, or Esc to revert.
 
 **Built-in themes:** `default`, `light`, `dracula`, `solarized-dark`, `nord`
 

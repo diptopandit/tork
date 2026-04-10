@@ -13,7 +13,8 @@
     "delete": "d",
     "search": "/",
     "done": "x",
-    "status": "s"
+    "status": "s",
+    "theme_picker": "T"
   },
   "display": {
     "columns": ["title", "status", "priority", "due_date"],

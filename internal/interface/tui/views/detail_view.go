@@ -55,6 +55,12 @@ func NewDetailView(cfg config.DisplayConfig, s styles.Styles, priorities []confi
 	}
 }
 
+// SetStyles replaces the styles used for rendering.
+func (m DetailView) SetStyles(s styles.Styles) DetailView {
+	m.styles = s
+	return m
+}
+
 // SetTask updates the displayed task and refreshes updates content.
 func (m DetailView) SetTask(t *domain.Task) DetailView {
 	m.task = t

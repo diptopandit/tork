@@ -13,19 +13,20 @@ func defaults() Config {
 	return Config{
 		ThemeName: "default",
 		Keybindings: KeyMap{
-			Up:     "k",
-			Down:   "j",
-			Left:   "h",
-			Right:  "l",
-			Select: "enter",
-			Quit:   "q",
-			Help:   "?",
-			New:    "n",
-			Edit:   "e",
-			Delete: "d",
-			Search: "/",
-			Done:   "x",
-			Status: "s",
+			Up:          "k",
+			Down:        "j",
+			Left:        "h",
+			Right:       "l",
+			Select:      "enter",
+			Quit:        "q",
+			Help:        "?",
+			New:         "n",
+			Edit:        "e",
+			Delete:      "d",
+			Search:      "/",
+			Done:        "x",
+			Status:      "s",
+			ThemePicker: "T",
 		},
 		Display: DisplayConfig{
 			Columns:        []string{"title", "status", "priority", "due_date"},
@@ -85,8 +86,8 @@ func ResolveTheme(themeName string, configDir string) (ThemeFile, error) {
 	return tf, nil
 }
 
-// applyTheme populates the runtime Theme field on cfg from a resolved ThemeFile.
-func applyTheme(cfg *Config, tf ThemeFile) {
+// ApplyTheme populates the runtime Theme field on cfg from a resolved ThemeFile.
+func ApplyTheme(cfg *Config, tf ThemeFile) {
 	cfg.Theme = tf.Colors
 	cfg.Theme.Border = tf.Border
 	if cfg.Theme.Border == "" {
@@ -113,7 +114,7 @@ func Load() (*Config, error) {
 	if os.IsNotExist(err) {
 		// No config file — apply default theme and return.
 		tf := BuiltinThemes["default"]
-		applyTheme(&cfg, tf)
+		ApplyTheme(&cfg, tf)
 		return &cfg, nil
 	}
 	if err != nil {
@@ -147,7 +148,7 @@ func Load() (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	applyTheme(&cfg, tf)
+	ApplyTheme(&cfg, tf)
 
 	return &cfg, nil
 }

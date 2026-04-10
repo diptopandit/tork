@@ -53,6 +53,24 @@ func NewListView(cfg config.DisplayConfig, s styles.Styles, priorities []config.
 	}
 }
 
+// SetStyles replaces the styles used for rendering, rebuilding table styles.
+func (m ListView) SetStyles(s styles.Styles) ListView {
+	m.styles = s
+
+	m.activeStyle = table.DefaultStyles()
+	m.activeStyle.Cell = s.TableCellActive
+	m.activeStyle.Header = s.TableHeaderActive
+	m.activeStyle.Selected = s.TableSelectedActive
+
+	m.inactStyle = table.DefaultStyles()
+	m.inactStyle.Cell = s.TableCellInactive
+	m.inactStyle.Header = s.TableHeaderInactive
+	m.inactStyle.Selected = s.TableSelectedInactive
+
+	m.table.SetStyles(m.activeStyle)
+	return m
+}
+
 // SetActive updates the table focus style.
 func (m ListView) SetActive(active bool) ListView {
 	if active {

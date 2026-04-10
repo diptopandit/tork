@@ -100,19 +100,20 @@ func DefaultPriority(defs []PriorityDef) int {
 
 // KeyMap holds vim-style key bindings used by the TUI.
 type KeyMap struct {
-	Up     string `json:"up"`
-	Down   string `json:"down"`
-	Left   string `json:"left"`
-	Right  string `json:"right"`
-	Select string `json:"select"`
-	Quit   string `json:"quit"`
-	Help   string `json:"help"`
-	New    string `json:"new"`
-	Edit   string `json:"edit"`
-	Delete string `json:"delete"`
-	Search string `json:"search"`
-	Done   string `json:"done"`
-	Status string `json:"status"`
+	Up          string `json:"up"`
+	Down        string `json:"down"`
+	Left        string `json:"left"`
+	Right       string `json:"right"`
+	Select      string `json:"select"`
+	Quit        string `json:"quit"`
+	Help        string `json:"help"`
+	New         string `json:"new"`
+	Edit        string `json:"edit"`
+	Delete      string `json:"delete"`
+	Search      string `json:"search"`
+	Done        string `json:"done"`
+	Status      string `json:"status"`
+	ThemePicker string `json:"theme_picker"`
 }
 
 // DisplayConfig controls how the task list table is rendered.

@@ -207,3 +207,9 @@ func (m FilterView) buildFilter() domain.TaskFilter {
 
 	return f
 }
+
+// SetStyles replaces the styles used for rendering.
+func (m FilterView) SetStyles(s styles.Styles) FilterView {
+	m.styles = s
+	return m
+}

@@ -299,3 +299,9 @@ func (m EditView) submit() (EditView, tea.Cmd) {
 	m.savedTask = saved
 	return m, nil
 }
+
+// SetStyles replaces the styles used for rendering.
+func (m EditView) SetStyles(s styles.Styles) EditView {
+	m.styles = s
+	return m
+}

@@ -43,11 +43,12 @@ func ValidTab(defs []config.StatusDef, s string) bool {
 type Overlay int
 
 const (
-	OverlayNone       Overlay = iota
-	OverlayEdit               // create / edit task form
-	OverlayFilter             // filter panel
-	OverlayHelp               // keybinding help
-	OverlayListSwitch         // list switcher
+	OverlayNone        Overlay = iota
+	OverlayEdit                // create / edit task form
+	OverlayFilter              // filter panel
+	OverlayHelp                // keybinding help
+	OverlayListSwitch          // list switcher
+	OverlayThemePicker         // theme picker with live preview
 )
 
 // AppState holds all mutable UI state in one place.

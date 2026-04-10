@@ -100,6 +100,11 @@ type Model struct {
 	listSwitchMode   int // 0=select, 1=create, 2=rename, 3=confirmDelete, 4=confirmDelete2
 	listSwitchInput  textinput.Model
 
+	// Theme picker state
+	themePickerView   views.ThemePickerView
+	originalThemeName string        // theme before opening picker (for Esc revert)
+	originalStyles    styles.Styles // styles before opening picker
+
 	// Pane dimensions (snitch-style layout)
 	leftWidth     int
 	rightWidth    int
@@ -341,6 +346,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handleListSwitchKeys(msg)
 		}
 
+		// Theme picker overlay
+		if m.state.ActiveOverlay == OverlayThemePicker {
+			return m.handleThemePickerKeys(msg)
+		}
+
 		// Route to the active pane
 		switch m.state.ActivePane {
 		case PaneList:
@@ -411,6 +421,13 @@ func (m Model) View() string {
 	if m.state.ActiveOverlay == OverlayListSwitch {
 		lsBox := m.renderListSwitchOverlay()
 		full = lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, lsBox,
+			lipgloss.WithWhitespaceChars(" "))
+	}
+
+	// Overlay: theme picker
+	if m.state.ActiveOverlay == OverlayThemePicker {
+		tpBox := m.renderThemePickerOverlay()
+		full = lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, tpBox,
 			lipgloss.WithWhitespaceChars(" "))
 	}
 
@@ -674,6 +691,7 @@ func (m Model) renderHelpOverlay() string {
 	b.WriteString("\n" + m.styles.HelpSection.Render("General") + "\n")
 	for _, bind := range []struct{ k, desc string }{
 		{"L", "Switch task list (n: new, r: rename, d: delete)"},
+		{"T", "Theme picker (live preview)"},
 		{"?", "Toggle this help"},
 		{"q / Ctrl+C", "Quit"},
 		{"Esc", "Close overlay / back"},
@@ -717,6 +735,9 @@ func (m Model) handleListKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case isKey(msg, m.keymap.ListSwitch):
 		m.state.ActiveOverlay = OverlayListSwitch
 		return m, nil
+
+	case isKey(msg, m.keymap.ThemePicker):
+		return m.openThemePicker(), nil
 
 	case isKey(msg, m.keymap.Comment):
 		if t := m.listView.SelectedTask(); t != nil {
@@ -803,6 +824,9 @@ func (m Model) handleDetailKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case isKey(msg, m.keymap.Help):
 		m.state.ActiveOverlay = OverlayHelp
 		return m, nil
+
+	case isKey(msg, m.keymap.ThemePicker):
+		return m.openThemePicker(), nil
 
 	case isKey(msg, m.keymap.Comment):
 		if m.state.SelectedTask != nil {
@@ -1254,4 +1278,78 @@ func (m Model) renderListSwitchOverlay() string {
 	}
 
 	return m.styles.OverlayList.Render(b.String())
+}
+
+// ---- theme picker -----------------------------------------------------------
+
+func (m Model) openThemePicker() Model {
+	configDir, _ := m.cfg.ResolveDataDir()
+	names := config.ListThemes(configDir)
+	m.originalThemeName = m.cfg.ThemeName
+	m.originalStyles = m.styles
+	m.themePickerView = views.NewThemePickerView(names, configDir, m.styles)
+	m.state.ActiveOverlay = OverlayThemePicker
+	return m
+}
+
+func (m Model) handleThemePickerKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch {
+	case msg.Type == tea.KeyEsc:
+		// Revert to original theme.
+		m.styles = m.originalStyles
+		m.cfg.ThemeName = m.originalThemeName
+		m.rebuildAllViewStyles()
+		m.state.ActiveOverlay = OverlayNone
+		return m, nil
+
+	case msg.String() == "j" || msg.Type == tea.KeyDown:
+		m.themePickerView = m.themePickerView.CursorDown()
+		return m.applyThemePreview()
+
+	case msg.String() == "k" || msg.Type == tea.KeyUp:
+		m.themePickerView = m.themePickerView.CursorUp()
+		return m.applyThemePreview()
+
+	case msg.Type == tea.KeyEnter:
+		m.themePickerView = m.themePickerView.Select()
+		name := m.themePickerView.SelectedName()
+		if name != "" {
+			m.cfg.ThemeName = name
+			_ = config.Save(m.cfg)
+			m.state.StatusMsg = "Theme set to " + name
+		}
+		m.state.ActiveOverlay = OverlayNone
+		return m, nil
+	}
+
+	return m, nil
+}
+
+// applyThemePreview lazily resolves the theme at the cursor and live-applies it.
+func (m Model) applyThemePreview() (tea.Model, tea.Cmd) {
+	picker, tf, err := m.themePickerView.ResolveAtCursor()
+	m.themePickerView = picker
+	if err != nil {
+		m.state.StatusMsg = "Theme error: " + err.Error()
+		return m, nil
+	}
+
+	// Apply the preview theme.
+	config.ApplyTheme(m.cfg, tf)
+	m.styles = styles.NewStyles(m.cfg.Theme)
+	m.themePickerView = m.themePickerView.SetStyles(m.styles)
+	m.rebuildAllViewStyles()
+	return m, nil
+}
+
+// rebuildAllViewStyles propagates the current styles to all sub-views.
+func (m *Model) rebuildAllViewStyles() {
+	m.listView = m.listView.SetStyles(m.styles)
+	m.detailView = m.detailView.SetStyles(m.styles)
+	m.editView = m.editView.SetStyles(m.styles)
+	m.filterView = m.filterView.SetStyles(m.styles)
+}
+
+func (m Model) renderThemePickerOverlay() string {
+	return m.styles.OverlayList.Render(m.themePickerView.View())
 }
