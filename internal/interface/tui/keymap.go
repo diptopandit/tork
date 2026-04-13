@@ -27,6 +27,7 @@ type KeyMap struct {
 	ListSwitch  key.Binding
 	Comment     key.Binding
 	ThemePicker key.Binding
+	Sort        key.Binding
 }
 
 // ShortHelp returns bindings shown in the compact help bar.
@@ -39,7 +40,7 @@ func (k KeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down, k.Left, k.Right},
 		{k.New, k.Edit, k.Done, k.Status, k.Delete, k.Comment},
-		{k.Search, k.Tab, k.ShiftTab, k.ListSwitch, k.ThemePicker, k.Help, k.Quit},
+		{k.Search, k.Tab, k.ShiftTab, k.ListSwitch, k.ThemePicker, k.Sort, k.Help, k.Quit},
 	}
 }
 
@@ -48,6 +49,14 @@ func NewKeyMap(c config.KeyMap) KeyMap {
 	tpKey := c.ThemePicker
 	if tpKey == "" {
 		tpKey = "T"
+	}
+	lsKey := c.ListSwitch
+	if lsKey == "" {
+		lsKey = "L"
+	}
+	sortKey := c.Sort
+	if sortKey == "" {
+		sortKey = "S"
 	}
 	return KeyMap{
 		Up:          key.NewBinding(key.WithKeys(c.Up, "up"), key.WithHelp(c.Up+"/↑", "up")),
@@ -65,9 +74,10 @@ func NewKeyMap(c config.KeyMap) KeyMap {
 		Status:      key.NewBinding(key.WithKeys(c.Status), key.WithHelp(c.Status, "cycle status")),
 		Tab:         key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "next tab")),
 		ShiftTab:    key.NewBinding(key.WithKeys("shift+tab"), key.WithHelp("shift+tab", "prev tab")),
-		ListSwitch:  key.NewBinding(key.WithKeys("L"), key.WithHelp("L", "switch list")),
+		ListSwitch:  key.NewBinding(key.WithKeys(lsKey), key.WithHelp(lsKey, "switch list")),
 		Comment:     key.NewBinding(key.WithKeys("u"), key.WithHelp("u", "add update")),
 		ThemePicker: key.NewBinding(key.WithKeys(tpKey), key.WithHelp(tpKey, "theme picker")),
+		Sort:        key.NewBinding(key.WithKeys(sortKey), key.WithHelp(sortKey, "sort tasks")),
 	}
 }
 

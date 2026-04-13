@@ -141,12 +141,12 @@ Date format: DD-MM-YYYY (default) or YYYY-MM-DD (both accepted).
 
 | Key | Action |
 |-----|--------|
-| `j` / `↓` | Move down |
-| `k` / `↑` | Move up |
+| `j` / `↓` | Move down (scroll focused section in detail pane) |
+| `k` / `↑` | Move up (scroll focused section in detail pane) |
 | `h` / `←` | Focus left pane |
 | `l` / `→` | Focus right pane |
-| `Tab` | Next status tab |
-| `Shift+Tab` | Previous status tab |
+| `Tab` | Next status tab (left pane) / cycle detail↔updates focus (right pane) |
+| `Shift+Tab` | Previous status tab (left pane) / cycle updates↔detail focus (right pane) |
 | `Enter` | Select / view detail |
 
 ### Task Actions
@@ -166,6 +166,7 @@ Date format: DD-MM-YYYY (default) or YYYY-MM-DD (both accepted).
 |-----|--------|
 | `L` | Open task list switcher (n: new, r: rename, d: delete) |
 | `T` | Open theme picker (live preview, Enter to apply, Esc to revert) |
+| `S` | Sort tasks (by priority, due date, or ID) |
 | `/` | Search / filter |
 | `?` | Toggle keybinding help |
 | `q` / `Ctrl+C` | Quit |
@@ -204,7 +205,10 @@ Config example:
     "delete": "d",
     "search": "/",
     "done": "x",
-    "status": "s"
+    "status": "s",
+    "theme_picker": "T",
+    "list_switch": "L",
+    "sort": "S"
   },
   "display": {
     "columns": ["title", "status", "priority", "due_date"],

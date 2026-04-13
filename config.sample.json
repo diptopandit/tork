@@ -14,7 +14,9 @@
     "search": "/",
     "done": "x",
     "status": "s",
-    "theme_picker": "T"
+    "theme_picker": "T",
+    "list_switch": "L",
+    "sort": "S"
   },
   "display": {
     "columns": ["title", "status", "priority", "due_date"],

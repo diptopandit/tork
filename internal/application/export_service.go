@@ -7,10 +7,13 @@ import (
 	"strings"
 
 	"github.com/diptopandit/tork/internal/domain"
+	"github.com/diptopandit/tork/internal/infrastructure/config"
 )
 
 // MarkdownExporter exports tasks as a Markdown checklist.
-type MarkdownExporter struct{}
+type MarkdownExporter struct {
+	Priorities []config.PriorityDef
+}
 
 // Export implements domain.Exporter for Markdown output.
 func (e MarkdownExporter) Export(tasks []domain.Task) ([]byte, error) {
@@ -20,7 +23,8 @@ func (e MarkdownExporter) Export(tasks []domain.Task) ([]byte, error) {
 		if t.Status == domain.StatusDone {
 			check = "[x]"
 		}
-		line := fmt.Sprintf("- %s **%s** (%s)", check, t.Title, t.Priority.String())
+		priLabel := config.PriorityLabel(e.Priorities, int(t.Priority))
+		line := fmt.Sprintf("- %s **%s** (%s)", check, t.Title, priLabel)
 		if t.DueDate != nil {
 			line += " due:" + t.DueDate.Format("2006-01-02")
 		}
@@ -30,7 +34,9 @@ func (e MarkdownExporter) Export(tasks []domain.Task) ([]byte, error) {
 }
 
 // CSVExporter exports tasks as comma-separated values.
-type CSVExporter struct{}
+type CSVExporter struct {
+	Priorities []config.PriorityDef
+}
 
 // Export implements domain.Exporter for CSV output.
 func (e CSVExporter) Export(tasks []domain.Task) ([]byte, error) {
@@ -43,11 +49,12 @@ func (e CSVExporter) Export(tasks []domain.Task) ([]byte, error) {
 		if t.DueDate != nil {
 			due = t.DueDate.Format("2006-01-02")
 		}
+		priLabel := config.PriorityLabel(e.Priorities, int(t.Priority))
 		_ = w.Write([]string{
 			t.ID,
 			t.Title,
 			string(t.Status),
-			t.Priority.String(),
+			priLabel,
 			due,
 			strings.Join(t.Tags, "|"),
 			t.ListID,

@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
@@ -105,12 +106,19 @@ type Model struct {
 	originalThemeName string        // theme before opening picker (for Esc revert)
 	originalStyles    styles.Styles // styles before opening picker
 
+	// Sort state
+	sortView views.SortView
+
+	// Help overlay state
+	helpViewport viewport.Model
+
 	// Pane dimensions (snitch-style layout)
 	leftWidth     int
 	rightWidth    int
 	contentHeight int
-	inputBoxH     int // right pane: input box total height
-	updatesH      int // right pane: updates viewport inner height (computed)
+	inputBoxH     int // right pane: input box total height (border included)
+	detailBoxH    int // right pane: detail box total height (border included)
+	updatesBoxH   int // right pane: updates box total height (border included)
 
 	tabOrder []string // configurable tab names (status strings + "all")
 }
@@ -327,8 +335,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.state.ActiveOverlay == OverlayHelp {
 			if msg.Type == tea.KeyEsc || key.Matches(msg, m.keymap.Help) || msg.String() == "q" {
 				m.state.ActiveOverlay = OverlayNone
+				return m, nil
 			}
-			return m, nil
+			// Forward to the help viewport for scrolling.
+			var cmd tea.Cmd
+			m.helpViewport, cmd = m.helpViewport.Update(msg)
+			return m, cmd
 		}
 
 		// Edit overlay
@@ -349,6 +361,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Theme picker overlay
 		if m.state.ActiveOverlay == OverlayThemePicker {
 			return m.handleThemePickerKeys(msg)
+		}
+
+		// Sort overlay
+		if m.state.ActiveOverlay == OverlaySort {
+			return m.handleSortKeys(msg)
 		}
 
 		// Route to the active pane
@@ -431,6 +448,13 @@ func (m Model) View() string {
 			lipgloss.WithWhitespaceChars(" "))
 	}
 
+	// Overlay: sort
+	if m.state.ActiveOverlay == OverlaySort {
+		sortBox := m.renderSortOverlay()
+		full = lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, sortBox,
+			lipgloss.WithWhitespaceChars(" "))
+	}
+
 	return full
 }
 
@@ -461,9 +485,10 @@ func (m *Model) recalcLayout() {
 	}
 	m.listView = m.listView.SetSize(listInnerW, listInnerH)
 
-	// Right pane: 3 stacked boxes sharing contentHeight.
+	// Right pane: 3 stacked boxes sharing contentHeight, all fixed height.
 	// Input box: fixed 3 lines total (border=2 + 1 content).
-	// Detail box & updates box: sized dynamically at render time.
+	// Detail box: fixed ~25% of remaining.
+	// Updates box: whatever is left.
 	rightInnerW := m.rightWidth - 2
 	if rightInnerW < 10 {
 		rightInnerW = 10
@@ -472,18 +497,35 @@ func (m *Model) recalcLayout() {
 
 	m.detailView = m.detailView.SetWidth(rightInnerW)
 
-	// Compute updates viewport height from available space.
-	// Detail box height is estimated (will be refined at render time).
-	detailEstH := 8 // typical detail content lines + border
-	updatesTotal := m.contentHeight - detailEstH - m.inputBoxH
+	// Compute fixed heights for detail and updates boxes.
+	remaining := m.contentHeight - m.inputBoxH // total for detail + updates
+	detailTotal := remaining * 55 / 100        // ~55% for detail
+	if detailTotal < 5 {
+		detailTotal = 5
+	}
+	updatesTotal := remaining - detailTotal
 	if updatesTotal < 4 {
 		updatesTotal = 4
+		detailTotal = remaining - updatesTotal
+		if detailTotal < 3 {
+			detailTotal = 3
+		}
 	}
-	m.updatesH = updatesTotal - 3
-	if m.updatesH < 1 {
-		m.updatesH = 1
+	m.detailBoxH = detailTotal
+	m.updatesBoxH = updatesTotal
+
+	// Inner heights = total - 2 for border
+	detailInnerH := detailTotal - 2
+	if detailInnerH < 1 {
+		detailInnerH = 1
 	}
-	m.detailView = m.detailView.SetUpdatesHeight(m.updatesH)
+	updatesInnerH := updatesTotal - 2
+	if updatesInnerH < 1 {
+		updatesInnerH = 1
+	}
+
+	m.detailView = m.detailView.SetDetailHeight(detailInnerH)
+	m.detailView = m.detailView.SetUpdatesHeight(updatesInnerH)
 
 	m.editView = m.editView.SetSize(m.width*60/100, m.height*70/100)
 	m.filterView = m.filterView.SetSize(m.width*50/100, m.height*50/100)
@@ -569,59 +611,48 @@ func (m Model) renderLeftPane() string {
 // ---- render: right pane (detail) --------------------------------------------
 
 func (m Model) renderRightPane() string {
-	borderStyle := m.styles.PaneBorderUnfocused
-	focusedBorderStyle := m.styles.PaneBorderFocused
-	if m.state.ActivePane == PaneDetail {
-		borderStyle = focusedBorderStyle
-	}
+	unfocused := m.styles.PaneBorderUnfocused
+	focused := m.styles.PaneBorderFocused
+	isRight := m.state.ActivePane == PaneDetail
 
 	boxW := m.rightWidth - 2
 
-	// Box 1: Task details — render content first to measure natural height
-	detailContent := m.detailView.ViewDetails()
-	detailInnerH := lipgloss.Height(detailContent)
+	// All three boxes use pre-computed fixed heights from recalcLayout.
+	detailInnerH := m.detailBoxH - 2
 	if detailInnerH < 1 {
 		detailInnerH = 1
 	}
-	detailTotalH := detailInnerH + 2 // +2 for border
-
-	// Box 3: Input — fixed height
-	inputTotalH := m.inputBoxH // 3
-
-	// Box 2: Updates — takes all remaining height
-	updatesTotalH := m.contentHeight - detailTotalH - inputTotalH
-	if updatesTotalH < 4 {
-		// Shrink detail to make room rather than exceeding contentHeight.
-		detailTotalH = m.contentHeight - 4 - inputTotalH
-		if detailTotalH < 3 {
-			detailTotalH = 3
-		}
-		detailInnerH = detailTotalH - 2
-		if detailInnerH < 1 {
-			detailInnerH = 1
-		}
-		updatesTotalH = m.contentHeight - detailTotalH - inputTotalH
-	}
-	updatesInnerH := updatesTotalH - 2
+	updatesInnerH := m.updatesBoxH - 2
 	if updatesInnerH < 1 {
 		updatesInnerH = 1
 	}
 
-	detailStyle := borderStyle.
+	// Detail box: focused when right pane active and DetailFocus == FocusDetails
+	detailBorder := unfocused
+	if isRight && m.state.DetailFocus == FocusDetails {
+		detailBorder = focused
+	}
+	detailStyle := detailBorder.
 		Width(boxW).
 		Height(detailInnerH)
-	detailBox := detailStyle.Render(detailContent)
+	detailBox := detailStyle.Render(m.detailView.ViewDetails())
 
-	updatesStyle := borderStyle.
+	// Updates box: focused when right pane active and DetailFocus == FocusUpdates
+	updatesBorder := unfocused
+	if isRight && m.state.DetailFocus == FocusUpdates {
+		updatesBorder = focused
+	}
+	updatesStyle := updatesBorder.
 		Width(boxW).
 		Height(updatesInnerH)
 	updatesBox := updatesStyle.Render(m.detailView.ViewUpdates())
 
-	inputBorderStyle := borderStyle
+	// Input box: focused when input has focus
+	inputBorder := unfocused
 	if m.detailView.InputFocused() {
-		inputBorderStyle = focusedBorderStyle
+		inputBorder = focused
 	}
-	inputStyle := inputBorderStyle.
+	inputStyle := inputBorder.
 		Width(boxW).
 		Height(m.inputBoxH - 2)
 	inputBox := inputStyle.Render(m.detailView.ViewInput())
@@ -660,16 +691,17 @@ func (m Model) renderFilterOverlay() string {
 	return m.styles.OverlayFilter.Render(m.filterView.View())
 }
 
-func (m Model) renderHelpOverlay() string {
+func (m Model) helpContent() string {
 	var b strings.Builder
 
 	b.WriteString(m.styles.HelpTitle.Render("Keybindings") + "\n\n")
 
 	b.WriteString(m.styles.HelpSection.Render("Navigation") + "\n")
 	for _, bind := range []struct{ k, desc string }{
-		{"j/\u2193  k/\u2191", "Move down / up"},
+		{"j/\u2193  k/\u2191", "Move down / up (scroll in detail pane)"},
 		{"h/\u2190 l/\u2192", "Focus left / right pane"},
-		{"Tab / Shift+Tab", "Next / previous status tab"},
+		{"Tab / Shift+Tab", "Next / previous status tab (left pane)"},
+		{"Tab / Shift+Tab", "Cycle detail / updates focus (right pane)"},
 	} {
 		b.WriteString("  " + m.styles.HelpKey.Render(bind.k) + m.styles.HelpDesc.Render(bind.desc) + "\n")
 	}
@@ -692,6 +724,7 @@ func (m Model) renderHelpOverlay() string {
 	for _, bind := range []struct{ k, desc string }{
 		{"L", "Switch task list (n: new, r: rename, d: delete)"},
 		{"T", "Theme picker (live preview)"},
+		{"S", "Sort tasks"},
 		{"?", "Toggle this help"},
 		{"q / Ctrl+C", "Quit"},
 		{"Esc", "Close overlay / back"},
@@ -699,9 +732,47 @@ func (m Model) renderHelpOverlay() string {
 		b.WriteString("  " + m.styles.HelpKey.Render(bind.k) + m.styles.HelpDesc.Render(bind.desc) + "\n")
 	}
 
-	b.WriteString("\n" + m.styles.HintText.Render("Press Esc or ? to close"))
+	return b.String()
+}
 
-	return m.styles.OverlayHelp.Render(b.String())
+func (m Model) helpOverlayInnerSize() (int, int) {
+	maxW := m.width * 70 / 100
+	if maxW < 40 {
+		maxW = 40
+	}
+	innerW := maxW - 6
+	if innerW < 30 {
+		innerW = 30
+	}
+	maxH := m.height * 70 / 100
+	if maxH < 10 {
+		maxH = 10
+	}
+	innerH := maxH - 6
+	return innerW, innerH
+}
+
+func (m *Model) initHelpViewport() {
+	content := m.helpContent()
+	innerW, innerH := m.helpOverlayInnerSize()
+
+	m.helpViewport = viewport.New(innerW, innerH)
+	m.helpViewport.SetContent(content)
+}
+
+func (m Model) renderHelpOverlay() string {
+	innerW, innerH := m.helpOverlayInnerSize()
+	content := m.helpViewport.View()
+
+	contentH := lipgloss.Height(m.helpContent())
+	if contentH > innerH {
+		scrollPct := int(m.helpViewport.ScrollPercent() * 100)
+		content += "\n" + m.styles.HintText.Render(fmt.Sprintf("↑/↓ scroll • %d%%", scrollPct))
+	}
+
+	return m.styles.OverlayHelp.
+		Width(innerW).
+		Render(content)
 }
 
 // ---- key routing ------------------------------------------------------------
@@ -715,11 +786,13 @@ func (m Model) handleListKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 
 	case isKey(msg, m.keymap.Help):
+		m.initHelpViewport()
 		m.state.ActiveOverlay = OverlayHelp
 		return m, nil
 
 	case isKey(msg, m.keymap.Right):
 		m.state.ActivePane = PaneDetail
+		m.detailView = m.detailView.SetDetailFocus(m.state.DetailFocus == FocusDetails)
 		return m, nil
 
 	case isKey(msg, m.keymap.Tab):
@@ -738,6 +811,9 @@ func (m Model) handleListKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case isKey(msg, m.keymap.ThemePicker):
 		return m.openThemePicker(), nil
+
+	case isKey(msg, m.keymap.Sort):
+		return m.openSortPicker(), nil
 
 	case isKey(msg, m.keymap.Comment):
 		if t := m.listView.SelectedTask(); t != nil {
@@ -822,11 +898,35 @@ func (m Model) handleDetailKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 
 	case isKey(msg, m.keymap.Help):
+		m.initHelpViewport()
 		m.state.ActiveOverlay = OverlayHelp
 		return m, nil
 
 	case isKey(msg, m.keymap.ThemePicker):
 		return m.openThemePicker(), nil
+
+	case isKey(msg, m.keymap.Sort):
+		return m.openSortPicker(), nil
+
+	case isKey(msg, m.keymap.Tab):
+		// Cycle detail sub-focus: details → updates → details
+		if m.state.DetailFocus == FocusDetails {
+			m.state.DetailFocus = FocusUpdates
+		} else {
+			m.state.DetailFocus = FocusDetails
+		}
+		m.detailView = m.detailView.SetDetailFocus(m.state.DetailFocus == FocusDetails)
+		return m, nil
+
+	case isKey(msg, m.keymap.ShiftTab):
+		// Reverse cycle
+		if m.state.DetailFocus == FocusUpdates {
+			m.state.DetailFocus = FocusDetails
+		} else {
+			m.state.DetailFocus = FocusUpdates
+		}
+		m.detailView = m.detailView.SetDetailFocus(m.state.DetailFocus == FocusDetails)
+		return m, nil
 
 	case isKey(msg, m.keymap.Comment):
 		if m.state.SelectedTask != nil {
@@ -1352,4 +1452,44 @@ func (m *Model) rebuildAllViewStyles() {
 
 func (m Model) renderThemePickerOverlay() string {
 	return m.styles.OverlayList.Render(m.themePickerView.View())
+}
+
+// ---- sort picker ------------------------------------------------------------
+
+func (m Model) openSortPicker() Model {
+	m.sortView = views.NewSortView(m.styles).
+		SetCursorFromSort(m.state.Filter.SortField, m.state.Filter.SortDir)
+	m.state.ActiveOverlay = OverlaySort
+	return m
+}
+
+func (m Model) handleSortKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch {
+	case msg.Type == tea.KeyEsc:
+		m.state.ActiveOverlay = OverlayNone
+		return m, nil
+
+	case msg.String() == "j" || msg.Type == tea.KeyDown:
+		m.sortView = m.sortView.CursorDown()
+		return m, nil
+
+	case msg.String() == "k" || msg.Type == tea.KeyUp:
+		m.sortView = m.sortView.CursorUp()
+		return m, nil
+
+	case msg.Type == tea.KeyEnter:
+		m.sortView = m.sortView.Select()
+		opt := m.sortView.SelectedOption()
+		m.state.Filter.SortField = opt.Field
+		m.state.Filter.SortDir = opt.Dir
+		m.state.ActiveOverlay = OverlayNone
+		m.state.StatusMsg = "Sorted by " + opt.Label
+		return m, m.loadTasks()
+	}
+
+	return m, nil
+}
+
+func (m Model) renderSortOverlay() string {
+	return m.styles.OverlayList.Render(m.sortView.View())
 }

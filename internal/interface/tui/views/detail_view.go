@@ -24,20 +24,23 @@ type UpdateSubmittedMsg struct {
 // Each section is rendered independently so the caller can compose them
 // into separate bordered boxes.
 type DetailView struct {
-	cfg        config.DisplayConfig
-	styles     styles.Styles
-	priorities []config.PriorityDef
-	statuses   []config.StatusDef
-	task       *domain.Task
-	updates    viewport.Model
-	input      textarea.Model
-	inputFocus bool
-	width      int
+	cfg         config.DisplayConfig
+	styles      styles.Styles
+	priorities  []config.PriorityDef
+	statuses    []config.StatusDef
+	task        *domain.Task
+	detail      viewport.Model // scrollable detail viewport
+	updates     viewport.Model
+	input       textarea.Model
+	inputFocus  bool
+	detailFocus bool // true = scroll detail viewport; false = scroll updates viewport
+	width       int
 }
 
 // NewDetailView constructs a DetailView.
 func NewDetailView(cfg config.DisplayConfig, s styles.Styles, priorities []config.PriorityDef, statuses []config.StatusDef) DetailView {
-	vp := viewport.New(80, 10)
+	dvp := viewport.New(80, 6)
+	uvp := viewport.New(80, 10)
 
 	ta := textarea.New()
 	ta.Placeholder = "Type update… (enter submit, esc cancel)"
@@ -50,7 +53,8 @@ func NewDetailView(cfg config.DisplayConfig, s styles.Styles, priorities []confi
 		styles:     s,
 		priorities: priorities,
 		statuses:   statuses,
-		updates:    vp,
+		detail:     dvp,
+		updates:    uvp,
 		input:      ta,
 	}
 }
@@ -64,6 +68,8 @@ func (m DetailView) SetStyles(s styles.Styles) DetailView {
 // SetTask updates the displayed task and refreshes updates content.
 func (m DetailView) SetTask(t *domain.Task) DetailView {
 	m.task = t
+	m.detail.SetContent(m.renderDetails(t))
+	m.detail.GotoTop()
 	m.updates.SetContent(m.renderUpdates(t))
 	m.updates.GotoBottom()
 	return m
@@ -72,9 +78,11 @@ func (m DetailView) SetTask(t *domain.Task) DetailView {
 // SetWidth sets the available inner width for all sections.
 func (m DetailView) SetWidth(w int) DetailView {
 	m.width = w
+	m.detail.Width = w
 	m.input.SetWidth(w - 4)
 	m.input.SetHeight(1)
 	if m.task != nil {
+		m.detail.SetContent(m.renderDetails(m.task))
 		m.updates.SetContent(m.renderUpdates(m.task))
 	}
 	return m
@@ -84,6 +92,13 @@ func (m DetailView) SetWidth(w int) DetailView {
 func (m DetailView) SetUpdatesHeight(h int) DetailView {
 	m.updates.Width = m.width
 	m.updates.Height = h
+	return m
+}
+
+// SetDetailHeight sets the viewport height for the detail section.
+func (m DetailView) SetDetailHeight(h int) DetailView {
+	m.detail.Width = m.width
+	m.detail.Height = h
 	return m
 }
 
@@ -105,6 +120,17 @@ func (m DetailView) BlurInput() DetailView {
 // InputFocused reports whether the textarea currently has focus.
 func (m DetailView) InputFocused() bool {
 	return m.inputFocus
+}
+
+// SetDetailFocus sets whether the detail viewport (true) or updates viewport (false) receives scroll events.
+func (m DetailView) SetDetailFocus(focus bool) DetailView {
+	m.detailFocus = focus
+	return m
+}
+
+// DetailFocused reports whether the detail section has scroll focus.
+func (m DetailView) DetailFocused() bool {
+	return m.detailFocus
 }
 
 // Update handles messages for the updates viewport and input textarea.
@@ -132,18 +158,19 @@ func (m DetailView) Update(msg tea.Msg) (DetailView, tea.Cmd) {
 		return m, cmd
 	}
 
-	// When not input-focused, scroll the updates viewport
+	// When not input-focused, scroll the focused viewport
 	var cmd tea.Cmd
-	m.updates, cmd = m.updates.Update(msg)
+	if m.detailFocus {
+		m.detail, cmd = m.detail.Update(msg)
+	} else {
+		m.updates, cmd = m.updates.Update(msg)
+	}
 	return m, cmd
 }
 
-// ViewDetails renders the fixed task-detail section.
+// ViewDetails renders the scrollable task-detail viewport.
 func (m DetailView) ViewDetails() string {
-	if m.task == nil {
-		return m.styles.EmptyState.Render("No task selected.")
-	}
-	return m.renderDetails(m.task)
+	return m.detail.View()
 }
 
 // ViewUpdates renders the scrollable updates viewport.
@@ -159,7 +186,7 @@ func (m DetailView) ViewInput() string {
 // renderDetails builds the fixed top section content.
 func (m DetailView) renderDetails(t *domain.Task) string {
 	if t == nil {
-		return ""
+		return m.styles.EmptyState.Render("No task selected.")
 	}
 	labelStyle := m.styles.FieldLabel
 	valueStyle := m.styles.FieldValue

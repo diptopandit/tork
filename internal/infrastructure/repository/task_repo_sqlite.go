@@ -181,8 +181,11 @@ func (r *TaskRepoSQLite) List(filter domain.TaskFilter) ([]domain.Task, error) {
 
 	q := "SELECT id, num_id, list_id, title, description, status, priority, due_date, " +
 		"tags, custom_fields, parent_id, depends_on, created_at, updated_at " +
-		"FROM tasks WHERE " + strings.Join(conds, " AND ") +
-		" ORDER BY priority DESC, due_date ASC, created_at ASC"
+		"FROM tasks WHERE " + strings.Join(conds, " AND ")
+
+	// Apply sort order.
+	orderClause := buildOrderClause(filter.SortField, filter.SortDir)
+	q += " ORDER BY " + orderClause
 
 	rows, err := r.db.Query(q, args...)
 	if err != nil {
@@ -258,6 +261,31 @@ func placeholders(n int) string {
 		p[i] = "?"
 	}
 	return strings.Join(p, ",")
+}
+
+func buildOrderClause(field domain.SortField, dir domain.SortDir) string {
+	col := ""
+	switch field {
+	case domain.SortByPriority:
+		col = "priority"
+	case domain.SortByDueDate:
+		col = "due_date"
+	case domain.SortByID:
+		col = "num_id"
+	}
+
+	d := "ASC"
+	if dir == domain.SortDesc {
+		d = "DESC"
+	} else if dir == domain.SortAsc {
+		d = "ASC"
+	}
+
+	if col == "" {
+		// Default sort: priority DESC, due_date ASC, created_at ASC
+		return "priority DESC, due_date ASC, created_at ASC"
+	}
+	return col + " " + d
 }
 
 func nullTime(t *time.Time) interface{} {

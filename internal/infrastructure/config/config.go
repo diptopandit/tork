@@ -114,6 +114,8 @@ type KeyMap struct {
 	Done        string `json:"done"`
 	Status      string `json:"status"`
 	ThemePicker string `json:"theme_picker"`
+	ListSwitch  string `json:"list_switch"`
+	Sort        string `json:"sort"`
 }
 
 // DisplayConfig controls how the task list table is rendered.

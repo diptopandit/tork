@@ -13,6 +13,14 @@ const (
 	PaneDetail             // right: task detail viewport
 )
 
+// DetailFocus identifies which section of the right pane has scroll focus.
+type DetailFocus int
+
+const (
+	FocusDetails DetailFocus = iota // task detail section (top)
+	FocusUpdates                    // task updates section (middle)
+)
+
 // TabLabel returns a display label for a tab name using the config statuses.
 // "all" is always labelled "All".
 func TabLabel(defs []config.StatusDef, s string) string {
@@ -49,12 +57,14 @@ const (
 	OverlayHelp                // keybinding help
 	OverlayListSwitch          // list switcher
 	OverlayThemePicker         // theme picker with live preview
+	OverlaySort                // sort picker
 )
 
 // AppState holds all mutable UI state in one place.
 type AppState struct {
 	ActivePane    Pane
-	ActiveTab     int // index into Model.tabOrder
+	DetailFocus   DetailFocus // which right-pane section has scroll focus
+	ActiveTab     int         // index into Model.tabOrder
 	ActiveOverlay Overlay
 	ActiveListID  string // currently active task list filter
 	SelectedTask  *domain.Task

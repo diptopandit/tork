@@ -27,6 +27,8 @@ func defaults() Config {
 			Done:        "x",
 			Status:      "s",
 			ThemePicker: "T",
+			ListSwitch:  "L",
+			Sort:        "S",
 		},
 		Display: DisplayConfig{
 			Columns:        []string{"title", "status", "priority", "due_date"},
