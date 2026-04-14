@@ -27,6 +27,7 @@ It provides:
 - [TUI Keybindings](#tui-keybindings)
 - [Task Lists](#task-lists)
 - [Data, Config, and Logs](#data-config-and-logs)
+- [Remote Database (MySQL)](#remote-database-mysql)
 - [Roadmap](#roadmap)
 - [Security](#security)
 - [License](#license)
@@ -50,6 +51,7 @@ tork is built for engineers who want a local-first task manager that is:
 - **Configurable** — keybindings, date format, named themes, display columns, statuses, priorities
 - **Themes** — 5 built-in themes (default, light, dracula, solarized-dark, nord) + custom theme files
 - **Offline-first** — all data stored locally in SQLite
+- **Remote MySQL backend** — optional multi-user mode with shared/private task lists
 
 ## Installation
 
@@ -231,7 +233,12 @@ Config example:
     { "name": "urgent", "value": 4, "label": "Urgent" }
   ],
   "default_list": "",
-  "last_list": ""
+  "last_list": "",
+  "remote_db": {
+    "driver": "mysql",
+    "dsn": "user:password@tcp(localhost:3306)/tork"
+  },
+  "username": "alice"
 }
 ```
 
@@ -308,12 +315,66 @@ Then set `"theme": "my-theme"` in config.json.
 
 All fields are required. Theme files are validated on load; missing fields produce a clear error message.
 
+## Remote Database (MySQL)
+
+By default, tork stores everything locally in SQLite. For multi-user or team use, you can configure a remote MySQL backend. When `remote_db` is set in config, tork connects to MySQL instead of SQLite — there is no sync; the remote server **is** the data source.
+
+### Setup
+
+1. Create a MySQL database:
+
+```sql
+CREATE DATABASE tork CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'torkuser'@'%' IDENTIFIED BY 'yourpassword';
+GRANT ALL PRIVILEGES ON tork.* TO 'torkuser'@'%';
+FLUSH PRIVILEGES;
+```
+
+2. Add to `~/.tork/config.json`:
+
+```json
+{
+  "remote_db": {
+    "driver": "mysql",
+    "dsn": "torkuser:yourpassword@tcp(hostname:3306)/tork"
+  },
+  "username": "alice"
+}
+```
+
+tork auto-generates a `user_id` (UUID) on first connect and persists it to your config. The `username` is your display name.
+
+### Multi-User Access
+
+Multiple tork instances can connect to the same MySQL database simultaneously. Each user sees:
+
+- **Their own private lists** (default)
+- **Shared lists** they've been added to as a member
+
+### List Visibility
+
+| Visibility | Who can see | Who can edit |
+|---|---|---|
+| `private` | Owner only | Owner only |
+| `shared` | Owner + members | Owner + members with `editor` or `admin` role |
+
+### Member Roles
+
+| Role | Permissions |
+|---|---|
+| `viewer` | Read-only access to list and its tasks |
+| `editor` | Create, edit, delete tasks and updates |
+| `admin` | Editor + rename/delete list, manage members |
+
+### Schema Differences
+
+The MySQL schema includes additional tables (`users`, `list_members`) and columns (`owner_id`, `visibility` on `task_lists`) for multi-user support. Full-text search uses MySQL `FULLTEXT` indexes instead of SQLite FTS5. The SQLite schema is unchanged and fully backward compatible.
+
 ## Roadmap
 
 - Recurring tasks
 - Better query language for advanced filtering
 - Export command wiring for Markdown/CSV
-- Optional sync adapter
 - Packaged release binaries
 
 ## Security

@@ -43,6 +43,23 @@ clean:
 test:
 	go test ./...
 
+## test-integration: run MySQL integration tests (requires Docker)
+test-integration:
+	@docker rm -f tork-mysql-test 2>/dev/null || true
+	docker run -d --name tork-mysql-test \
+		-e MYSQL_ROOT_PASSWORD=tork \
+		-e MYSQL_DATABASE=tork_test \
+		-p 3306:3306 \
+		--tmpfs /var/lib/mysql \
+		mysql:8.0
+	@echo "Waiting for MySQL to be ready..."
+	@for i in $$(seq 1 30); do \
+		docker exec tork-mysql-test mysqladmin ping -h localhost -ptork --silent 2>/dev/null && break; \
+		sleep 2; \
+	done
+	TORK_MYSQL_DSN="root:tork@tcp(127.0.0.1:3306)/tork_test" go test -v ./... || (docker rm -f tork-mysql-test && exit 1)
+	docker rm -f tork-mysql-test
+
 ## vet: run static analysis
 vet:
 	go vet ./...

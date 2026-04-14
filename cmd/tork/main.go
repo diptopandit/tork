@@ -6,12 +6,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/diptopandit/tork/internal/application"
+	"github.com/diptopandit/tork/internal/infrastructure/bootstrap"
 	"github.com/diptopandit/tork/internal/infrastructure/config"
-	"github.com/diptopandit/tork/internal/infrastructure/db"
 	"github.com/diptopandit/tork/internal/infrastructure/logger"
-	"github.com/diptopandit/tork/internal/infrastructure/repository"
-	"github.com/diptopandit/tork/internal/infrastructure/search"
 	"github.com/diptopandit/tork/internal/interface/tui"
 )
 
@@ -38,29 +35,16 @@ func main() {
 		defer log.Sync()
 	}
 
-	// Database.
-	conn, err := db.Open(dataDir)
+	// Database + services (SQLite or MySQL based on config).
+	svc, err := bootstrap.Init(cfg)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "db:", err)
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	defer conn.Close()
-
-	if err := db.Migrate(conn); err != nil {
-		fmt.Fprintln(os.Stderr, "migrate:", err)
-		os.Exit(1)
-	}
-
-	// Repositories + services.
-	taskRepo := repository.NewTaskRepo(conn)
-	listRepo := repository.NewListRepo(conn)
-	updateRepo := repository.NewUpdateRepo(conn)
-	ftsSvc := search.NewFTSSearch(conn)
-	taskSvc := application.NewTaskService(taskRepo, updateRepo, ftsSvc)
-	listSvc := application.NewListService(listRepo)
+	defer svc.DB.Close()
 
 	// Build and run the TUI.
-	m := tui.NewModel(taskSvc, listSvc, cfg)
+	m := tui.NewModel(svc.TaskSvc, svc.ListSvc, cfg)
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintln(os.Stderr, "tui:", err)

@@ -4,11 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/diptopandit/tork/internal/application"
+	"github.com/diptopandit/tork/internal/infrastructure/bootstrap"
 	"github.com/diptopandit/tork/internal/infrastructure/config"
-	"github.com/diptopandit/tork/internal/infrastructure/db"
-	"github.com/diptopandit/tork/internal/infrastructure/repository"
-	"github.com/diptopandit/tork/internal/infrastructure/search"
 	cli "github.com/diptopandit/tork/internal/interface/cli"
 )
 
@@ -19,32 +16,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	dataDir, err := cfg.ResolveDataDir()
+	svc, err := bootstrap.Init(cfg)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "data dir:", err)
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+	defer svc.DB.Close()
 
-	conn, err := db.Open(dataDir)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "db:", err)
-		os.Exit(1)
-	}
-	defer conn.Close()
-
-	if err := db.Migrate(conn); err != nil {
-		fmt.Fprintln(os.Stderr, "migrate:", err)
-		os.Exit(1)
-	}
-
-	taskRepo := repository.NewTaskRepo(conn)
-	listRepo := repository.NewListRepo(conn)
-	updateRepo := repository.NewUpdateRepo(conn)
-	ftsSvc := search.NewFTSSearch(conn)
-	taskSvc := application.NewTaskService(taskRepo, updateRepo, ftsSvc)
-	listSvc := application.NewListService(listRepo)
-
-	root := cli.NewRootCmd(taskSvc, listSvc, cfg)
+	root := cli.NewRootCmd(svc.TaskSvc, svc.ListSvc, cfg)
 	if err := root.Execute(); err != nil {
 		os.Exit(1)
 	}

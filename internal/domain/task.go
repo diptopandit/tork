@@ -78,8 +78,24 @@ type Update struct {
 
 // TaskList is a named collection of tasks that may carry a custom field schema.
 type TaskList struct {
+	ID         string
+	Name       string
+	Schema     map[string]FieldDefinition
+	OwnerID    string // empty for SQLite (single-user); set for remote DB
+	Visibility string // "private" or "shared"; empty defaults to "private"
+	CreatedAt  time.Time
+}
+
+// User represents a tork user for multi-user remote DB mode.
+type User struct {
 	ID        string
-	Name      string
-	Schema    map[string]FieldDefinition
+	Username  string
 	CreatedAt time.Time
+}
+
+// ListMember represents a user's membership in a shared list.
+type ListMember struct {
+	ListID string
+	UserID string
+	Role   string // "viewer", "editor", "admin"
 }

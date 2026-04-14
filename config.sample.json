@@ -39,5 +39,10 @@
     { "name": "urgent", "value": 4, "label": "Urgent" }
   ],
   "default_list": "",
-  "last_list": ""
+  "last_list": "",
+  "remote_db": {
+    "driver": "mysql",
+    "dsn": "user:password@tcp(localhost:3306)/tork"
+  },
+  "username": "alice"
 }

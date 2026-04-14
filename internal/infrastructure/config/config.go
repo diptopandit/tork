@@ -189,15 +189,25 @@ type ThemeFile struct {
 
 // Config is the top-level application configuration.
 type Config struct {
-	DataDir     string        `json:"data_dir"` // directory for db, logs, config (default: ~/.tork)
-	Keybindings KeyMap        `json:"keybindings"`
-	Display     DisplayConfig `json:"display"`
-	ThemeName   string        `json:"theme"`        // name of the active theme
-	Theme       ThemeConfig   `json:"-"`            // resolved at load time, not serialized
-	Statuses    []StatusDef   `json:"statuses"`     // ordered task statuses
-	Priorities  []PriorityDef `json:"priorities"`   // ordered priority levels
-	DefaultList string        `json:"default_list"` // list name or ID to open on startup
-	LastList    string        `json:"last_list"`    // persisted by TUI on exit
+	DataDir     string          `json:"data_dir"` // directory for db, logs, config (default: ~/.tork)
+	Keybindings KeyMap          `json:"keybindings"`
+	Display     DisplayConfig   `json:"display"`
+	ThemeName   string          `json:"theme"`               // name of the active theme
+	Theme       ThemeConfig     `json:"-"`                   // resolved at load time, not serialized
+	Statuses    []StatusDef     `json:"statuses"`            // ordered task statuses
+	Priorities  []PriorityDef   `json:"priorities"`          // ordered priority levels
+	DefaultList string          `json:"default_list"`        // list name or ID to open on startup
+	LastList    string          `json:"last_list"`           // persisted by TUI on exit
+	RemoteDB    *RemoteDBConfig `json:"remote_db,omitempty"` // optional remote MySQL backend
+	UserID      string          `json:"user_id,omitempty"`   // auto-generated UUID for remote multi-user
+	Username    string          `json:"username,omitempty"`  // display name for remote multi-user
+}
+
+// RemoteDBConfig holds connection details for an optional remote SQL backend.
+// When configured, tork uses this instead of the local SQLite database.
+type RemoteDBConfig struct {
+	Driver string `json:"driver"` // "mysql"
+	DSN    string `json:"dsn"`    // e.g. "user:pass@tcp(host:3306)/tork"
 }
 
 // ResolveDataDir returns the effective data directory, falling back to ~/.tork.

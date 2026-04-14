@@ -25,3 +25,10 @@ type TaskListRepository interface {
 	GetAll() ([]TaskList, error)
 	Delete(listID string) error
 }
+
+// UserRepository is the port for persisting users (remote DB only).
+type UserRepository interface {
+	EnsureUser(user *User) error // create if not exists
+	GetByID(id string) (*User, error)
+	GetByUsername(name string) (*User, error)
+}
