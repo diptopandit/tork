@@ -80,8 +80,8 @@ func newTestModel() Model {
 			{Name: "urgent", Value: 4, Label: "Urgent"},
 		},
 	}
-	taskSvc := application.NewTaskService(&stubTaskRepo{}, &stubUpdateRepo{}, &stubSearch{})
-	listSvc := application.NewListService(&stubListRepo{})
+	taskSvc := application.NewTaskService(&stubTaskRepo{}, &stubUpdateRepo{}, &stubSearch{}, nil)
+	listSvc := application.NewListService(&stubListRepo{}, nil)
 	return NewModel(taskSvc, listSvc, cfg, nil, nil)
 }
 

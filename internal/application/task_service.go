@@ -5,8 +5,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 
 	"github.com/diptopandit/tork/internal/domain"
+	"github.com/diptopandit/tork/internal/infrastructure/logger"
 )
 
 // TaskService orchestrates task use-cases.
@@ -14,11 +16,15 @@ type TaskService struct {
 	repo       domain.TaskRepository
 	updateRepo domain.UpdateRepository
 	search     domain.SearchService
+	log        logger.Logger
 }
 
 // NewTaskService constructs a TaskService.
-func NewTaskService(repo domain.TaskRepository, updateRepo domain.UpdateRepository, search domain.SearchService) *TaskService {
-	return &TaskService{repo: repo, updateRepo: updateRepo, search: search}
+func NewTaskService(repo domain.TaskRepository, updateRepo domain.UpdateRepository, search domain.SearchService, log logger.Logger) *TaskService {
+	if log == nil {
+		log = logger.Nop()
+	}
+	return &TaskService{repo: repo, updateRepo: updateRepo, search: search, log: log}
 }
 
 // CreateTask validates and persists a new task, then indexes it.
@@ -66,10 +72,12 @@ func (s *TaskService) CreateTask(in CreateTaskInput) (*domain.Task, error) {
 	}
 
 	if err := s.repo.Create(t); err != nil {
+		s.log.Error("create task failed", zap.String("title", t.Title), zap.Error(err))
 		return nil, fmt.Errorf("create task: %w", err)
 	}
 	// FTS index is maintained by DB triggers; explicit call here is a no-op safety net.
 	_ = s.search.Index(t)
+	s.log.Info("task created", zap.String("id", t.ID), zap.Int("num_id", t.NumID), zap.String("title", t.Title))
 	return t, nil
 }
 
@@ -109,18 +117,22 @@ func (s *TaskService) UpdateTask(in UpdateTaskInput) (*domain.Task, error) {
 	t.UpdatedAt = time.Now().UTC()
 
 	if err := s.repo.Update(t); err != nil {
+		s.log.Error("update task failed", zap.String("id", t.ID), zap.Error(err))
 		return nil, fmt.Errorf("update task: %w", err)
 	}
 	_ = s.search.Index(t)
+	s.log.Debug("task updated", zap.String("id", t.ID))
 	return t, nil
 }
 
 // DeleteTask removes a task and its search index entry.
 func (s *TaskService) DeleteTask(id string) error {
 	if err := s.repo.Delete(id); err != nil {
+		s.log.Error("delete task failed", zap.String("id", id), zap.Error(err))
 		return fmt.Errorf("delete task: %w", err)
 	}
 	_ = s.search.Delete(id)
+	s.log.Info("task deleted", zap.String("id", id))
 	return nil
 }
 

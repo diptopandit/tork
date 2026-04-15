@@ -14,7 +14,7 @@ func TestInit_SQLitePath(t *testing.T) {
 		DataDir: tmpDir,
 	}
 	// No Remotes — should use SQLite.
-	svc, err := Init(cfg, "local", "")
+	svc, err := Init(cfg, "local", "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,7 +39,7 @@ func TestInit_SQLitePath_CreatesList(t *testing.T) {
 	cfg := &config.Config{
 		DataDir: tmpDir,
 	}
-	svc, err := Init(cfg, "local", "")
+	svc, err := Init(cfg, "local", "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +76,7 @@ func TestInit_RemoteDB_FailsWithBadDSN(t *testing.T) {
 			},
 		},
 	}
-	_, err := Init(cfg, "bad", "invalid")
+	_, err := Init(cfg, "bad", "invalid", nil)
 	if err == nil {
 		t.Error("expected error for invalid MySQL DSN")
 	}

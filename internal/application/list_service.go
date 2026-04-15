@@ -5,18 +5,24 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 
 	"github.com/diptopandit/tork/internal/domain"
+	"github.com/diptopandit/tork/internal/infrastructure/logger"
 )
 
 // ListService orchestrates task-list use-cases.
 type ListService struct {
 	repo domain.TaskListRepository
+	log  logger.Logger
 }
 
 // NewListService constructs a ListService.
-func NewListService(repo domain.TaskListRepository) *ListService {
-	return &ListService{repo: repo}
+func NewListService(repo domain.TaskListRepository, log logger.Logger) *ListService {
+	if log == nil {
+		log = logger.Nop()
+	}
+	return &ListService{repo: repo, log: log}
 }
 
 // CreateList creates and persists a new TaskList.
@@ -34,8 +40,10 @@ func (s *ListService) CreateList(name string, schema map[string]domain.FieldDefi
 		CreatedAt: time.Now().UTC(),
 	}
 	if err := s.repo.Create(l); err != nil {
+		s.log.Error("create list failed", zap.String("name", name), zap.Error(err))
 		return nil, fmt.Errorf("create list: %w", err)
 	}
+	s.log.Info("list created", zap.String("id", l.ID), zap.String("name", name))
 	return l, nil
 }
 
@@ -60,15 +68,19 @@ func (s *ListService) UpdateList(id, name string) (*domain.TaskList, error) {
 	}
 	l.Name = name
 	if err := s.repo.Update(l); err != nil {
+		s.log.Error("update list failed", zap.String("id", id), zap.Error(err))
 		return nil, fmt.Errorf("update list: %w", err)
 	}
+	s.log.Debug("list updated", zap.String("id", id), zap.String("name", name))
 	return l, nil
 }
 
 // DeleteList removes a TaskList and all its tasks (via DB cascade).
 func (s *ListService) DeleteList(id string) error {
 	if err := s.repo.Delete(id); err != nil {
+		s.log.Error("delete list failed", zap.String("id", id), zap.Error(err))
 		return fmt.Errorf("delete list: %w", err)
 	}
+	s.log.Info("list deleted", zap.String("id", id))
 	return nil
 }

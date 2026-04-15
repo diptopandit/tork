@@ -189,7 +189,8 @@ type ThemeFile struct {
 
 // Config is the top-level application configuration.
 type Config struct {
-	DataDir     string                   `json:"data_dir"` // directory for db, logs, config (default: ~/.tork)
+	DataDir     string                   `json:"data_dir"`            // directory for db, logs, config (default: ~/.tork)
+	LogLevel    string                   `json:"log_level,omitempty"` // "debug", "info", "warn", "error" (default: "info")
 	Keybindings KeyMap                   `json:"keybindings"`
 	Display     DisplayConfig            `json:"display"`
 	ThemeName   string                   `json:"theme"`                 // name of the active theme

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -18,8 +19,24 @@ type Logger interface {
 	Sync() error
 }
 
-// New creates a Logger that writes to tork.log in the given data directory.
-func New(dataDir string) (Logger, error) {
+// ParseLevel converts a string level name to a zapcore.Level.
+// Accepted values: "debug", "info", "warn", "error". Default: InfoLevel.
+func ParseLevel(s string) zapcore.Level {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "debug":
+		return zap.DebugLevel
+	case "warn", "warning":
+		return zap.WarnLevel
+	case "error":
+		return zap.ErrorLevel
+	default:
+		return zap.InfoLevel
+	}
+}
+
+// New creates a Logger that writes to tork.log in the given data directory
+// at the specified level.
+func New(dataDir string, level zapcore.Level) (Logger, error) {
 	if err := os.MkdirAll(dataDir, 0o700); err != nil {
 		return nil, fmt.Errorf("logger: create log dir: %w", err)
 	}
@@ -37,7 +54,12 @@ func New(dataDir string) (Logger, error) {
 	core := zapcore.NewCore(
 		zapcore.NewJSONEncoder(cfg),
 		zapcore.AddSync(file),
-		zap.InfoLevel,
+		level,
 	)
 	return zap.New(core), nil
+}
+
+// Nop returns a Logger that discards all output.
+func Nop() Logger {
+	return zap.NewNop()
 }

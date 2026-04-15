@@ -40,7 +40,7 @@ func main() {
 	}
 
 	// Logger (best-effort; failures are non-fatal).
-	log, err := logger.New(dataDir)
+	log, err := logger.New(dataDir, logger.ParseLevel(cfg.LogLevel))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "warn: logger init:", err)
 	}
@@ -63,7 +63,7 @@ func main() {
 	}
 
 	// Always start with local SQLite so the TUI is immediately usable.
-	svc, err := bootstrap.Init(cfg, "local", "")
+	svc, err := bootstrap.Init(cfg, "local", "", log)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -71,7 +71,7 @@ func main() {
 
 	// ConnectFunc allows the TUI to switch databases on-the-fly.
 	connectFunc := func(remote, password string) (*bootstrap.Services, error) {
-		return bootstrap.Init(cfg, remote, password)
+		return bootstrap.Init(cfg, remote, password, log)
 	}
 
 	// Build and run the TUI. It handles remote picker + password overlay internally.

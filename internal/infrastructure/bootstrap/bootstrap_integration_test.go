@@ -68,7 +68,7 @@ func TestInit_MySQLPath(t *testing.T) {
 		Remotes: map[string]*config.RemoteConfig{"test": rc},
 	}
 
-	svc, err := Init(cfg, "test", password)
+	svc, err := Init(cfg, "test", password, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,7 +120,7 @@ func TestInit_MySQL_UsernameAsIdentity(t *testing.T) {
 		Remotes: map[string]*config.RemoteConfig{"test": rc},
 	}
 
-	svc, err := Init(cfg, "test", password)
+	svc, err := Init(cfg, "test", password, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

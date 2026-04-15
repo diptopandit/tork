@@ -8,6 +8,7 @@ import (
 
 	"github.com/diptopandit/tork/internal/infrastructure/bootstrap"
 	"github.com/diptopandit/tork/internal/infrastructure/config"
+	"github.com/diptopandit/tork/internal/infrastructure/logger"
 	cli "github.com/diptopandit/tork/internal/interface/cli"
 )
 
@@ -61,7 +62,17 @@ func main() {
 		_ = config.Save(cfg)
 	}
 
-	svc, err := bootstrap.Init(cfg, remoteName, password)
+	// Logger (best-effort; failures are non-fatal).
+	dataDir, _ := cfg.ResolveDataDir()
+	log, logErr := logger.New(dataDir, logger.ParseLevel(cfg.LogLevel))
+	if logErr != nil {
+		fmt.Fprintln(os.Stderr, "warn: logger init:", logErr)
+	}
+	if log != nil {
+		defer log.Sync()
+	}
+
+	svc, err := bootstrap.Init(cfg, remoteName, password, log)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

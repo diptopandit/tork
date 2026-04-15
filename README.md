@@ -28,6 +28,7 @@ It provides:
 - [TUI Keybindings](#tui-keybindings)
 - [Task Lists](#task-lists)
 - [Data, Config, and Logs](#data-config-and-logs)
+- [Logging and Debugging](#logging-and-debugging)
 - [Remote Database (MySQL)](#remote-database-mysql)
 - [Roadmap](#roadmap)
 - [Security](#security)
@@ -225,6 +226,7 @@ Config example:
 ```json
 {
   "data_dir": "",
+  "log_level": "info",
   "keybindings": {
     "up": "k",
     "down": "j",
@@ -355,6 +357,52 @@ Then set `"theme": "my-theme"` in config.json.
 | `priority_colors` | Positional array — index 0 is the first priority in your `priorities` config, etc. |
 
 All fields are required. Theme files are validated on load; missing fields produce a clear error message.
+
+## Logging and Debugging
+
+tork writes structured JSON logs to `~/.tork/tork.log`. Both the TUI (`tork`) and the CLI (`tork-cli`) write to the same log file.
+
+### Log Levels
+
+Set `"log_level"` in `~/.tork/config.json`:
+
+```json
+{
+  "log_level": "debug"
+}
+```
+
+| Level | Description |
+|-------|-------------|
+| `debug` | Verbose output — includes every task update, DB query details |
+| `info` | Default — task create/delete, DB connections, migrations |
+| `warn` | Warnings only |
+| `error` | Errors only |
+
+### Viewing Logs
+
+```bash
+# Follow logs in real time
+tail -f ~/.tork/tork.log
+
+# Pretty-print with jq
+tail -f ~/.tork/tork.log | jq .
+
+# Filter for errors
+grep '"level":"error"' ~/.tork/tork.log | jq .
+```
+
+### What Gets Logged
+
+- Database open/close and migration events
+- Remote MySQL connection attempts (host, port, database, user — never passwords)
+- Task creation, updates, and deletion (with IDs)
+- List creation, rename, and deletion
+- Errors with full context
+
+### Disabling Logs
+
+Set `"log_level": "error"` to minimize output. The log file is always created but will remain small at higher log levels.
 
 ## Remote Database (MySQL)
 

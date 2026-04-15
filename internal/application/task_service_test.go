@@ -102,7 +102,7 @@ func (s *mockSearch) Search(string) ([]string, error) { return nil, nil }
 // ---- tests ------------------------------------------------------------------
 
 func newTestSvc() *TaskService {
-	return NewTaskService(newMockTaskRepo(), &mockUpdateRepo{}, &mockSearch{})
+	return NewTaskService(newMockTaskRepo(), &mockUpdateRepo{}, &mockSearch{}, nil)
 }
 
 func TestCreateTask_Valid(t *testing.T) {
