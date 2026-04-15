@@ -22,7 +22,7 @@ var (
 func main() {
 	for _, arg := range os.Args[1:] {
 		if arg == "--version" || arg == "-v" {
-			fmt.Printf("tork %s (commit %s, built %s)\n", version, commit, date)
+			fmt.Printf("tork %s (%s, %s)\n", version, commit, date)
 			os.Exit(0)
 		}
 	}

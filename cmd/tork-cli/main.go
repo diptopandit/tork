@@ -68,7 +68,7 @@ func main() {
 	}
 	defer svc.DB.Close()
 
-	root := cli.NewRootCmd(svc.TaskSvc, svc.ListSvc, cfg, version)
+	root := cli.NewRootCmd(svc.TaskSvc, svc.ListSvc, cfg, fmt.Sprintf("%s (%s, %s)", version, commit, date))
 	if err := root.Execute(); err != nil {
 		os.Exit(1)
 	}
