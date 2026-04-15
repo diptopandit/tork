@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/diptopandit/tork/internal/application"
 	"github.com/diptopandit/tork/internal/domain"
 	"github.com/diptopandit/tork/internal/infrastructure/config"
@@ -22,11 +20,14 @@ type Services struct {
 	DB      *sql.DB
 }
 
-// Init opens the database (SQLite or MySQL based on config), runs migrations,
-// creates repos/services, and returns them bundled.
-func Init(cfg *config.Config) (*Services, error) {
-	if cfg.RemoteDB != nil && cfg.RemoteDB.DSN != "" {
-		return initMySQL(cfg)
+// Init opens the database (SQLite or MySQL based on remoteName), runs
+// migrations, creates repos/services, and returns them bundled.
+// remoteName should be "local" (or empty) for SQLite, or a key in cfg.Remotes.
+// password is required for remote connections (ignored for local).
+func Init(cfg *config.Config, remoteName string, password string) (*Services, error) {
+	rc := cfg.ActiveRemote(remoteName)
+	if rc != nil {
+		return initMySQL(cfg, remoteName, rc, password)
 	}
 	return initSQLite(cfg)
 }
@@ -58,8 +59,9 @@ func initSQLite(cfg *config.Config) (*Services, error) {
 	}, nil
 }
 
-func initMySQL(cfg *config.Config) (*Services, error) {
-	conn, err := db.OpenMySQL(cfg.RemoteDB.DSN)
+func initMySQL(cfg *config.Config, remoteName string, rc *config.RemoteConfig, password string) (*Services, error) {
+	dsn := rc.BuildDSN(password)
+	conn, err := db.OpenMySQL(dsn)
 	if err != nil {
 		return nil, fmt.Errorf("mysql: %w", err)
 	}
@@ -68,32 +70,19 @@ func initMySQL(cfg *config.Config) (*Services, error) {
 		return nil, fmt.Errorf("mysql migrate: %w", err)
 	}
 
-	// Ensure user exists.
-	userID := cfg.UserID
-	username := cfg.Username
-	if userID == "" {
-		userID = uuid.NewString()
-		cfg.UserID = userID
-		_ = config.Save(cfg) // persist generated user ID
-	}
-	if username == "" {
-		username = "user-" + userID[:8]
-		cfg.Username = username
-		_ = config.Save(cfg)
-	}
-
+	// Username is the unique user identity on a shared server.
 	userRepo := repository.NewUserRepoMySQL(conn)
 	if err := userRepo.EnsureUser(&domain.User{
-		ID:        userID,
-		Username:  username,
+		ID:        rc.Username,
+		Username:  rc.Username,
 		CreatedAt: time.Now().UTC(),
 	}); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("ensure user: %w", err)
 	}
 
-	taskRepo := repository.NewTaskRepoMySQL(conn, userID)
-	listRepo := repository.NewListRepoMySQL(conn, userID)
+	taskRepo := repository.NewTaskRepoMySQL(conn, rc.Username)
+	listRepo := repository.NewListRepoMySQL(conn, rc.Username)
 	updateRepo := repository.NewUpdateRepoMySQL(conn)
 	searchSvc := search.NewMySQLSearch(conn)
 

@@ -5,14 +5,18 @@ import (
 	"testing"
 )
 
-func TestConfig_RemoteDB_MarshalRoundtrip(t *testing.T) {
+func TestConfig_Remotes_MarshalRoundtrip(t *testing.T) {
 	cfg := defaults()
-	cfg.RemoteDB = &RemoteDBConfig{
-		Driver: "mysql",
-		DSN:    "user:pass@tcp(localhost:3306)/tork",
+	cfg.Remotes = map[string]*RemoteConfig{
+		"work": {
+			Driver:   "mysql",
+			Host:     "db.example.com",
+			Port:     3307,
+			Database: "mytork",
+			Username: "alice",
+		},
 	}
-	cfg.UserID = "test-uuid-1234"
-	cfg.Username = "alice"
+	cfg.LastRemote = "work"
 
 	data, err := json.Marshal(cfg)
 	if err != nil {
@@ -24,26 +28,57 @@ func TestConfig_RemoteDB_MarshalRoundtrip(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if got.RemoteDB == nil {
-		t.Fatal("RemoteDB is nil after roundtrip")
+	rc := got.ActiveRemote("work")
+	if rc == nil {
+		t.Fatal("remote 'work' is nil after roundtrip")
 	}
-	if got.RemoteDB.Driver != "mysql" {
-		t.Errorf("driver = %q, want mysql", got.RemoteDB.Driver)
+	if rc.Driver != "mysql" {
+		t.Errorf("driver = %q, want mysql", rc.Driver)
 	}
-	if got.RemoteDB.DSN != "user:pass@tcp(localhost:3306)/tork" {
-		t.Errorf("dsn = %q", got.RemoteDB.DSN)
+	if rc.Host != "db.example.com" {
+		t.Errorf("host = %q", rc.Host)
 	}
-	if got.UserID != "test-uuid-1234" {
-		t.Errorf("user_id = %q", got.UserID)
+	if rc.Port != 3307 {
+		t.Errorf("port = %d, want 3307", rc.Port)
 	}
-	if got.Username != "alice" {
-		t.Errorf("username = %q", got.Username)
+	if rc.Database != "mytork" {
+		t.Errorf("database = %q", rc.Database)
+	}
+	if rc.Username != "alice" {
+		t.Errorf("username = %q", rc.Username)
+	}
+	if got.LastRemote != "work" {
+		t.Errorf("last_remote = %q, want work", got.LastRemote)
+	}
+
+	// Verify BuildDSN.
+	dsn := rc.BuildDSN("secret")
+	if dsn != "alice:secret@tcp(db.example.com:3307)/mytork" {
+		t.Errorf("BuildDSN = %q", dsn)
 	}
 }
 
-func TestConfig_RemoteDB_OmitEmpty(t *testing.T) {
+func TestConfig_RemoteConfig_Defaults(t *testing.T) {
+	rc := &RemoteConfig{Driver: "mysql", Host: "localhost", Username: "root"}
+	if rc.EffectivePort() != 3306 {
+		t.Errorf("default port = %d, want 3306", rc.EffectivePort())
+	}
+	if rc.EffectiveDatabase() != "tork" {
+		t.Errorf("default database = %q, want tork", rc.EffectiveDatabase())
+	}
+	dsn := rc.BuildDSN("pw")
+	if dsn != "root:pw@tcp(localhost:3306)/tork" {
+		t.Errorf("BuildDSN = %q", dsn)
+	}
+	label := rc.Label()
+	if label != "root@localhost:3306/tork" {
+		t.Errorf("Label = %q", label)
+	}
+}
+
+func TestConfig_Remotes_OmitEmpty(t *testing.T) {
 	cfg := defaults()
-	// No RemoteDB set — should be omitted from JSON.
+	// No Remotes set — should be omitted from JSON.
 	data, err := json.Marshal(cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -53,24 +88,84 @@ func TestConfig_RemoteDB_OmitEmpty(t *testing.T) {
 	if err := json.Unmarshal(data, &raw); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := raw["remote_db"]; ok {
-		t.Error("remote_db should be omitted when nil")
+	if _, ok := raw["remotes"]; ok {
+		t.Error("remotes should be omitted when nil")
 	}
-	if _, ok := raw["user_id"]; ok {
-		t.Error("user_id should be omitted when empty")
+	if _, ok := raw["last_remote"]; ok {
+		t.Error("last_remote should be omitted when empty")
 	}
 }
 
-func TestConfig_RemoteDB_IsRemote(t *testing.T) {
-	// No remote config — should use SQLite path.
+func TestConfig_ActiveRemote(t *testing.T) {
 	cfg := defaults()
-	if cfg.RemoteDB != nil {
-		t.Error("default config should have nil RemoteDB")
+	// No remotes — ActiveRemote should return nil.
+	if cfg.ActiveRemote("anything") != nil {
+		t.Error("expected nil for empty remotes")
+	}
+	if cfg.ActiveRemote("local") != nil {
+		t.Error("expected nil for 'local'")
+	}
+	if cfg.ActiveRemote("") != nil {
+		t.Error("expected nil for empty string")
 	}
 
 	// With remote config.
-	cfg.RemoteDB = &RemoteDBConfig{Driver: "mysql", DSN: "test"}
-	if cfg.RemoteDB == nil || cfg.RemoteDB.DSN == "" {
-		t.Error("expected non-empty RemoteDB")
+	cfg.Remotes = map[string]*RemoteConfig{
+		"work": {Driver: "mysql", Host: "localhost", Username: "root"},
+	}
+	if rc := cfg.ActiveRemote("work"); rc == nil {
+		t.Error("expected non-nil for 'work'")
+	}
+	if rc := cfg.ActiveRemote("missing"); rc != nil {
+		t.Error("expected nil for unknown remote")
+	}
+}
+
+func TestConfig_ResolveRemote(t *testing.T) {
+	cfg := defaults()
+	cfg.Remotes = map[string]*RemoteConfig{
+		"work":     {Driver: "mysql", Host: "work-host", Username: "alice"},
+		"personal": {Driver: "mysql", Host: "personal-host", Username: "alice"},
+	}
+
+	// Flag --local wins.
+	name, picker := cfg.ResolveRemote("", true)
+	if name != "local" || picker {
+		t.Errorf("--local: got %q, picker=%v", name, picker)
+	}
+
+	// Flag --remote wins.
+	name, picker = cfg.ResolveRemote("work", false)
+	if name != "work" || picker {
+		t.Errorf("--remote work: got %q, picker=%v", name, picker)
+	}
+
+	// LastRemote set.
+	cfg.LastRemote = "personal"
+	name, picker = cfg.ResolveRemote("", false)
+	if name != "personal" || picker {
+		t.Errorf("last_remote: got %q, picker=%v", name, picker)
+	}
+
+	// Stale LastRemote → needs picker.
+	cfg.LastRemote = "deleted-remote"
+	name, picker = cfg.ResolveRemote("", false)
+	if !picker {
+		t.Error("stale last_remote should need picker")
+	}
+
+	// No preference, has remotes → needs picker.
+	cfg.LastRemote = ""
+	name, picker = cfg.ResolveRemote("", false)
+	if !picker {
+		t.Error("no preference with remotes should need picker")
+	}
+
+	// No remotes → local.
+	cfg.Remotes = nil
+	cfg.LastRemote = ""
+	name, picker = cfg.ResolveRemote("", false)
+	if name != "local" || picker {
+		t.Errorf("no remotes: got %q, picker=%v", name, picker)
 	}
 }

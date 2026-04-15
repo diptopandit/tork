@@ -189,25 +189,120 @@ type ThemeFile struct {
 
 // Config is the top-level application configuration.
 type Config struct {
-	DataDir     string          `json:"data_dir"` // directory for db, logs, config (default: ~/.tork)
-	Keybindings KeyMap          `json:"keybindings"`
-	Display     DisplayConfig   `json:"display"`
-	ThemeName   string          `json:"theme"`               // name of the active theme
-	Theme       ThemeConfig     `json:"-"`                   // resolved at load time, not serialized
-	Statuses    []StatusDef     `json:"statuses"`            // ordered task statuses
-	Priorities  []PriorityDef   `json:"priorities"`          // ordered priority levels
-	DefaultList string          `json:"default_list"`        // list name or ID to open on startup
-	LastList    string          `json:"last_list"`           // persisted by TUI on exit
-	RemoteDB    *RemoteDBConfig `json:"remote_db,omitempty"` // optional remote MySQL backend
-	UserID      string          `json:"user_id,omitempty"`   // auto-generated UUID for remote multi-user
-	Username    string          `json:"username,omitempty"`  // display name for remote multi-user
+	DataDir     string                   `json:"data_dir"` // directory for db, logs, config (default: ~/.tork)
+	Keybindings KeyMap                   `json:"keybindings"`
+	Display     DisplayConfig            `json:"display"`
+	ThemeName   string                   `json:"theme"`                 // name of the active theme
+	Theme       ThemeConfig              `json:"-"`                     // resolved at load time, not serialized
+	Statuses    []StatusDef              `json:"statuses"`              // ordered task statuses
+	Priorities  []PriorityDef            `json:"priorities"`            // ordered priority levels
+	DefaultList string                   `json:"default_list"`          // list name or ID to open on startup
+	LastList    string                   `json:"last_list"`             // persisted by TUI on exit
+	Remotes     map[string]*RemoteConfig `json:"remotes,omitempty"`     // named remote database backends
+	LastRemote  string                   `json:"last_remote,omitempty"` // "local" or remote name; empty = not chosen
+	// Deprecated: use Remotes instead. Kept for backward-compatible migration.
+	RemoteDB *RemoteDBConfig `json:"remote_db,omitempty"`
+	UserID   string          `json:"user_id,omitempty"`
+	Username string          `json:"username,omitempty"`
 }
 
-// RemoteDBConfig holds connection details for an optional remote SQL backend.
-// When configured, tork uses this instead of the local SQLite database.
+// RemoteConfig holds connection details for one remote backend.
+// Password is never stored — it's prompted at connection time.
+// Username doubles as the unique user identity for multi-user scoping.
+type RemoteConfig struct {
+	Driver   string `json:"driver"`             // "mysql"
+	Host     string `json:"host"`               // e.g. "db.example.com"
+	Port     int    `json:"port,omitempty"`     // default: 3306
+	Database string `json:"database,omitempty"` // default: "tork"
+	Username string `json:"username"`           // MySQL login user — unique per user on a shared server
+}
+
+// EffectivePort returns the configured port or 3306 as default.
+func (rc *RemoteConfig) EffectivePort() int {
+	if rc.Port > 0 {
+		return rc.Port
+	}
+	return 3306
+}
+
+// EffectiveDatabase returns the configured database name or "tork" as default.
+func (rc *RemoteConfig) EffectiveDatabase() string {
+	if rc.Database != "" {
+		return rc.Database
+	}
+	return "tork"
+}
+
+// BuildDSN constructs a MySQL DSN from the structured fields and the given password.
+func (rc *RemoteConfig) BuildDSN(password string) string {
+	return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s",
+		rc.Username, password, rc.Host, rc.EffectivePort(), rc.EffectiveDatabase())
+}
+
+// Label returns a human-readable label for this remote.
+func (rc *RemoteConfig) Label() string {
+	return fmt.Sprintf("%s@%s:%d/%s", rc.Username, rc.Host, rc.EffectivePort(), rc.EffectiveDatabase())
+}
+
+// RemoteDBConfig is the deprecated single-remote config. Migrated to Remotes on load.
 type RemoteDBConfig struct {
 	Driver string `json:"driver"` // "mysql"
 	DSN    string `json:"dsn"`    // e.g. "user:pass@tcp(host:3306)/tork"
+}
+
+// ActiveRemote returns the RemoteConfig for the given name, or nil if "local" or not found.
+func (c *Config) ActiveRemote(name string) *RemoteConfig {
+	if name == "" || name == "local" {
+		return nil
+	}
+	if c.Remotes == nil {
+		return nil
+	}
+	return c.Remotes[name]
+}
+
+// RemoteNames returns the sorted list of configured remote names.
+func (c *Config) RemoteNames() []string {
+	names := make([]string, 0, len(c.Remotes))
+	for name := range c.Remotes {
+		names = append(names, name)
+	}
+	// Stable order.
+	for i := 1; i < len(names); i++ {
+		for j := i; j > 0 && names[j] < names[j-1]; j-- {
+			names[j], names[j-1] = names[j-1], names[j]
+		}
+	}
+	return names
+}
+
+// ResolveRemote determines which remote to use based on flags and persisted state.
+// Returns the remote name ("local" for SQLite), and whether a picker should be shown
+// (true when there are remotes but no preference yet).
+func (c *Config) ResolveRemote(flagRemote string, flagLocal bool) (name string, needsPicker bool) {
+	// Explicit flags win.
+	if flagLocal {
+		return "local", false
+	}
+	if flagRemote != "" {
+		return flagRemote, false
+	}
+	// Persisted last choice.
+	if c.LastRemote != "" {
+		// Validate it still exists.
+		if c.LastRemote == "local" {
+			return "local", false
+		}
+		if c.ActiveRemote(c.LastRemote) != nil {
+			return c.LastRemote, false
+		}
+		// Stale reference — fall through.
+	}
+	// No preference. If remotes exist, need picker.
+	if len(c.Remotes) > 0 {
+		return "", true
+	}
+	return "local", false
 }
 
 // ResolveDataDir returns the effective data directory, falling back to ~/.tork.

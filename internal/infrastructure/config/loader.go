@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -141,6 +142,23 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("config: parse JSON: %w", err)
 	}
 
+	// Migrate deprecated remote_db → remotes map.
+	if cfg.RemoteDB != nil && cfg.RemoteDB.DSN != "" && len(cfg.Remotes) == 0 {
+		rc := &RemoteConfig{
+			Driver: cfg.RemoteDB.Driver,
+		}
+		// Parse DSN into structured fields: user:pass@tcp(host:port)/db
+		rc.Host, rc.Port, rc.Database, rc.Username = parseDSN(cfg.RemoteDB.DSN, cfg.Username)
+		cfg.Remotes = map[string]*RemoteConfig{"default": rc}
+		cfg.RemoteDB = nil
+		cfg.UserID = ""
+		cfg.Username = ""
+		if cfg.LastRemote == "" {
+			cfg.LastRemote = "default"
+		}
+		_ = Save(&cfg)
+	}
+
 	// Ensure themes directory exists.
 	themesDir := filepath.Join(configDir, "themes")
 	_ = os.MkdirAll(themesDir, 0o755)
@@ -202,4 +220,54 @@ func ListThemes(configDir string) []string {
 		}
 	}
 	return names
+}
+
+// parseDSN extracts host, port, database, and username from a MySQL DSN string.
+// Format: user:pass@tcp(host:port)/db
+// Falls back to defaults for any part it can't parse.
+func parseDSN(dsn, fallbackUsername string) (host string, port int, database string, username string) {
+	host = "localhost"
+	port = 3306
+	database = "tork"
+	username = fallbackUsername
+
+	// Extract user from "user:pass@..."
+	if at := strings.Index(dsn, "@"); at >= 0 {
+		userPart := dsn[:at]
+		if colon := strings.Index(userPart, ":"); colon >= 0 {
+			username = userPart[:colon]
+		} else {
+			username = userPart
+		}
+		dsn = dsn[at+1:]
+	}
+
+	// Extract host:port from "tcp(host:port)/db"
+	if strings.HasPrefix(dsn, "tcp(") {
+		dsn = dsn[4:]
+		if paren := strings.Index(dsn, ")"); paren >= 0 {
+			hostPort := dsn[:paren]
+			dsn = dsn[paren+1:]
+			if colon := strings.LastIndex(hostPort, ":"); colon >= 0 {
+				host = hostPort[:colon]
+				if p, err := strconv.Atoi(hostPort[colon+1:]); err == nil {
+					port = p
+				}
+			} else {
+				host = hostPort
+			}
+		}
+	}
+
+	// Extract database from "/db" or "/db?..."
+	if strings.HasPrefix(dsn, "/") {
+		db := dsn[1:]
+		if q := strings.Index(db, "?"); q >= 0 {
+			db = db[:q]
+		}
+		if db != "" {
+			database = db
+		}
+	}
+	return
 }

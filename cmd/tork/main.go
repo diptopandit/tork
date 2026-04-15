@@ -35,19 +35,54 @@ func main() {
 		defer log.Sync()
 	}
 
-	// Database + services (SQLite or MySQL based on config).
-	svc, err := bootstrap.Init(cfg)
+	// Parse --remote / --local flags and apply to config.
+	flagRemote, flagLocal := parseRemoteFlags(os.Args[1:])
+	remoteName, _ := cfg.ResolveRemote(flagRemote, flagLocal)
+
+	// If a specific remote was requested via flag, validate and persist.
+	if remoteName != "local" && cfg.ActiveRemote(remoteName) == nil {
+		fmt.Fprintf(os.Stderr, "error: remote %q not found in config (available: %v)\n", remoteName, cfg.RemoteNames())
+		os.Exit(1)
+	}
+	if flagRemote != "" || flagLocal {
+		cfg.LastRemote = remoteName
+		_ = config.Save(cfg)
+	}
+
+	// Always start with local SQLite so the TUI is immediately usable.
+	svc, err := bootstrap.Init(cfg, "local", "")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	defer svc.DB.Close()
 
-	// Build and run the TUI.
-	m := tui.NewModel(svc.TaskSvc, svc.ListSvc, cfg)
+	// ConnectFunc allows the TUI to switch databases on-the-fly.
+	connectFunc := func(remote, password string) (*bootstrap.Services, error) {
+		return bootstrap.Init(cfg, remote, password)
+	}
+
+	// Build and run the TUI. It handles remote picker + password overlay internally.
+	m := tui.NewModel(svc.TaskSvc, svc.ListSvc, cfg, connectFunc, svc.DB)
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
+		svc.DB.Close()
 		fmt.Fprintln(os.Stderr, "tui:", err)
 		os.Exit(1)
 	}
+}
+
+// parseRemoteFlags scans args for --remote <name> or --local.
+func parseRemoteFlags(args []string) (remote string, local bool) {
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--local":
+			local = true
+		case "--remote":
+			if i+1 < len(args) {
+				remote = args[i+1]
+				i++
+			}
+		}
+	}
+	return
 }

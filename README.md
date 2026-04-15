@@ -169,6 +169,7 @@ Date format: DD-MM-YYYY (default) or YYYY-MM-DD (both accepted).
 | `L` | Open task list switcher (n: new, r: rename, d: delete) |
 | `T` | Open theme picker (live preview, Enter to apply, Esc to revert) |
 | `S` | Sort tasks (by priority, due date, or ID) |
+| `R` | Switch remote database (if remotes configured) |
 | `/` | Search / filter |
 | `?` | Toggle keybinding help |
 | `q` / `Ctrl+C` | Quit |
@@ -234,11 +235,21 @@ Config example:
   ],
   "default_list": "",
   "last_list": "",
-  "remote_db": {
-    "driver": "mysql",
-    "dsn": "user:password@tcp(localhost:3306)/tork"
+  "remotes": {
+    "work": {
+      "driver": "mysql",
+      "host": "work-server.example.com",
+      "port": 3306,
+      "database": "tork",
+      "username": "alice"
+    },
+    "personal": {
+      "driver": "mysql",
+      "host": "personal-server.example.com",
+      "username": "alice"
+    }
   },
-  "username": "alice"
+  "last_remote": "work"
 }
 ```
 
@@ -317,7 +328,7 @@ All fields are required. Theme files are validated on load; missing fields produ
 
 ## Remote Database (MySQL)
 
-By default, tork stores everything locally in SQLite. For multi-user or team use, you can configure a remote MySQL backend. When `remote_db` is set in config, tork connects to MySQL instead of SQLite — there is no sync; the remote server **is** the data source.
+By default, tork stores everything locally in SQLite. For multi-user or team use, you can configure one or more remote MySQL backends. When a remote is selected, tork connects to MySQL instead of SQLite — there is no sync; the remote server **is** the data source.
 
 ### Setup
 
@@ -334,15 +345,33 @@ FLUSH PRIVILEGES;
 
 ```json
 {
-  "remote_db": {
-    "driver": "mysql",
-    "dsn": "torkuser:yourpassword@tcp(hostname:3306)/tork"
-  },
-  "username": "alice"
+  "remotes": {
+    "work": {
+      "driver": "mysql",
+      "host": "db.example.com",
+      "port": 3306,
+      "database": "tork",
+      "username": "torkuser"
+    }
+  }
 }
 ```
 
-tork auto-generates a `user_id` (UUID) on first connect and persists it to your config. The `username` is your display name.
+Password is prompted on each connection — it is never stored in config. The `username` field is both the MySQL login user and the unique identity for multi-user scoping. Default port is 3306, default database is `tork`.
+
+### Selecting a Remote
+
+| Method | Example |
+|---|---|
+| CLI flag | `tork --remote work list` or `tork --local list` |
+| TUI flag | `tork --remote work` or `tork --local` |
+| Last used | tork remembers your last selection (`last_remote` in config) |
+| Auto-connect | If `last_remote` is a remote, the TUI prompts for a password on startup and connects |
+| On-the-fly | Press `R` in the TUI to switch between local and remote databases |
+
+The TUI always starts with local SQLite so the interface is immediately available. If a remote was last used, a password overlay appears; on failure it falls back to local.
+
+The priority is: **CLI flag > last_remote > local (default)**.
 
 ### Multi-User Access
 

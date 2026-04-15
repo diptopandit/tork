@@ -82,7 +82,7 @@ func newTestModel() Model {
 	}
 	taskSvc := application.NewTaskService(&stubTaskRepo{}, &stubUpdateRepo{}, &stubSearch{})
 	listSvc := application.NewListService(&stubListRepo{})
-	return NewModel(taskSvc, listSvc, cfg)
+	return NewModel(taskSvc, listSvc, cfg, nil, nil)
 }
 
 // ---- tests ------------------------------------------------------------------

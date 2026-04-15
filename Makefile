@@ -53,9 +53,9 @@ test-integration:
 		--tmpfs /var/lib/mysql \
 		mysql:8.0
 	@echo "Waiting for MySQL to be ready..."
-	@for i in $$(seq 1 30); do \
-		docker exec tork-mysql-test mysqladmin ping -h localhost -ptork --silent 2>/dev/null && break; \
-		sleep 2; \
+	@for i in $$(seq 1 40); do \
+		docker exec tork-mysql-test mysql -h localhost -ptork -e "SELECT 1" tork_test >/dev/null 2>&1 && break; \
+		sleep 3; \
 	done
 	TORK_MYSQL_DSN="root:tork@tcp(127.0.0.1:3306)/tork_test" go test -v ./... || (docker rm -f tork-mysql-test && exit 1)
 	docker rm -f tork-mysql-test

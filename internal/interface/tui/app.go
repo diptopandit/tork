@@ -13,6 +13,7 @@ import (
 
 	"github.com/diptopandit/tork/internal/application"
 	"github.com/diptopandit/tork/internal/domain"
+	"github.com/diptopandit/tork/internal/infrastructure/bootstrap"
 	"github.com/diptopandit/tork/internal/infrastructure/config"
 	"github.com/diptopandit/tork/internal/interface/tui/styles"
 	"github.com/diptopandit/tork/internal/interface/tui/views"
@@ -79,6 +80,23 @@ type listDeletedMsg struct {
 const minWidth = 60
 const minHeight = 15
 
+// ConnectFunc creates services for a given remote (or "local").
+// Provided by main() as a closure over the config.
+type ConnectFunc func(remoteName, password string) (*bootstrap.Services, error)
+
+// remoteConnectedMsg is sent after an async remote connection attempt.
+type remoteConnectedMsg struct {
+	svc        *bootstrap.Services
+	remoteName string
+	err        error
+}
+
+// promptPasswordMsg triggers the password overlay for a pending remote.
+type promptPasswordMsg struct {
+	remoteName string
+	label      string
+}
+
 // ---- Model ------------------------------------------------------------------
 
 type Model struct {
@@ -112,6 +130,20 @@ type Model struct {
 	// Help overlay state
 	helpViewport viewport.Model
 
+	// Remote picker state
+	remotePickerCursor  int
+	remotePickerChoices []string // "local", remote names...
+	remotePickerLabels  []string
+
+	// Password overlay state
+	passwordInput     textinput.Model
+	pendingRemoteName string // remote name awaiting password
+	passwordLabel     string // display label for the remote
+
+	// Connection management
+	connectFunc ConnectFunc                // provided by main()
+	currentDB   interface{ Close() error } // current DB handle for cleanup
+
 	// Pane dimensions (snitch-style layout)
 	leftWidth     int
 	rightWidth    int
@@ -128,6 +160,8 @@ func NewModel(
 	taskSvc *application.TaskService,
 	listSvc *application.ListService,
 	cfg *config.Config,
+	connectFunc ConnectFunc,
+	currentDB interface{ Close() error },
 ) Model {
 	km := NewKeyMap(cfg.Keybindings)
 	h := help.New()
@@ -136,6 +170,12 @@ func NewModel(
 	lsInput := textinput.New()
 	lsInput.Placeholder = "List name"
 	lsInput.CharLimit = 100
+
+	// Password input for remote connections.
+	pwInput := textinput.New()
+	pwInput.Placeholder = "password"
+	pwInput.EchoMode = textinput.EchoPassword
+	pwInput.CharLimit = 256
 
 	// Determine initial list from config
 	activeListID := ""
@@ -183,6 +223,9 @@ func NewModel(
 		editView:        views.NewEditView(s, cfg.Statuses, cfg.Priorities),
 		filterView:      views.NewFilterView(s, cfg.Statuses, cfg.Priorities),
 		listSwitchInput: lsInput,
+		passwordInput:   pwInput,
+		connectFunc:     connectFunc,
+		currentDB:       currentDB,
 		tabOrder:        tabOrder,
 		state: AppState{
 			ActivePane:   PaneList,
@@ -192,9 +235,21 @@ func NewModel(
 	}
 }
 
-// Init kicks off the initial data fetch.
+// Init kicks off the initial data fetch. If a remote was configured as last
+// used, it sends a message to trigger the password overlay.
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(m.loadTasks(), m.loadLists())
+	cmds := []tea.Cmd{m.loadTasks(), m.loadLists()}
+
+	// If a remote is configured, schedule password prompt via message.
+	if rc := m.cfg.ActiveRemote(m.cfg.LastRemote); rc != nil && m.connectFunc != nil {
+		label := rc.Label()
+		name := m.cfg.LastRemote
+		cmds = append(cmds, func() tea.Msg {
+			return promptPasswordMsg{remoteName: name, label: label}
+		})
+	}
+
+	return tea.Batch(cmds...)
 }
 
 // Update is the root event handler.
@@ -325,6 +380,33 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case views.UpdateSubmittedMsg:
 		return m, m.addUpdate(msg.TaskID, msg.Body)
 
+	case remoteConnectedMsg:
+		if msg.err != nil {
+			m.state.StatusMsg = "Connection failed: " + msg.err.Error() + " (using local)"
+			m.pendingRemoteName = ""
+			return m, nil
+		}
+		// Close previous DB and swap services.
+		if m.currentDB != nil {
+			m.currentDB.Close()
+		}
+		m.taskSvc = msg.svc.TaskSvc
+		m.listSvc = msg.svc.ListSvc
+		m.currentDB = msg.svc.DB
+		m.cfg.LastRemote = msg.remoteName
+		_ = config.Save(m.cfg)
+		m.state.StatusMsg = "Connected to " + msg.remoteName
+		m.pendingRemoteName = ""
+		return m, tea.Batch(m.loadTasks(), m.loadLists())
+
+	case promptPasswordMsg:
+		m.pendingRemoteName = msg.remoteName
+		m.passwordLabel = msg.label
+		m.passwordInput.Reset()
+		m.passwordInput.Focus()
+		m.state.ActiveOverlay = OverlayPasswordPrompt
+		return m, textinput.Blink
+
 	case tea.KeyMsg:
 		if msg.String() == "ctrl+c" {
 			m.quitting = true
@@ -366,6 +448,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Sort overlay
 		if m.state.ActiveOverlay == OverlaySort {
 			return m.handleSortKeys(msg)
+		}
+
+		// Remote picker overlay
+		if m.state.ActiveOverlay == OverlayRemotePicker {
+			return m.handleRemotePickerKeys(msg)
+		}
+
+		// Password overlay
+		if m.state.ActiveOverlay == OverlayPasswordPrompt {
+			return m.handlePasswordKeys(msg)
 		}
 
 		// Route to the active pane
@@ -452,6 +544,20 @@ func (m Model) View() string {
 	if m.state.ActiveOverlay == OverlaySort {
 		sortBox := m.renderSortOverlay()
 		full = lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, sortBox,
+			lipgloss.WithWhitespaceChars(" "))
+	}
+
+	// Overlay: remote picker
+	if m.state.ActiveOverlay == OverlayRemotePicker {
+		rpBox := m.renderRemotePickerOverlay()
+		full = lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, rpBox,
+			lipgloss.WithWhitespaceChars(" "))
+	}
+
+	// Overlay: password prompt
+	if m.state.ActiveOverlay == OverlayPasswordPrompt {
+		pwBox := m.renderPasswordOverlay()
+		full = lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, pwBox,
 			lipgloss.WithWhitespaceChars(" "))
 	}
 
@@ -815,6 +921,12 @@ func (m Model) handleListKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case isKey(msg, m.keymap.Sort):
 		return m.openSortPicker(), nil
 
+	case isKey(msg, m.keymap.RemoteSwitch):
+		if len(m.cfg.Remotes) > 0 {
+			return m.openRemotePicker(), nil
+		}
+		return m, nil
+
 	case isKey(msg, m.keymap.Comment):
 		if t := m.listView.SelectedTask(); t != nil {
 			m.state.SelectedTask = t
@@ -907,6 +1019,12 @@ func (m Model) handleDetailKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case isKey(msg, m.keymap.Sort):
 		return m.openSortPicker(), nil
+
+	case isKey(msg, m.keymap.RemoteSwitch):
+		if len(m.cfg.Remotes) > 0 {
+			return m.openRemotePicker(), nil
+		}
+		return m, nil
 
 	case isKey(msg, m.keymap.Tab):
 		// Cycle detail sub-focus: details → updates → details
@@ -1492,4 +1610,133 @@ func (m Model) handleSortKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (m Model) renderSortOverlay() string {
 	return m.styles.OverlayList.Render(m.sortView.View())
+}
+
+// ---- remote picker ----------------------------------------------------------
+
+func (m Model) openRemotePicker() Model {
+	choices := []string{"local"}
+	labels := []string{"Local (SQLite)"}
+	for _, name := range m.cfg.RemoteNames() {
+		rc := m.cfg.Remotes[name]
+		labels = append(labels, fmt.Sprintf("%s — %s", name, rc.Label()))
+		choices = append(choices, name)
+	}
+	// Set cursor to the currently active remote.
+	cursor := 0
+	for i, c := range choices {
+		if c == m.cfg.LastRemote {
+			cursor = i
+			break
+		}
+	}
+	m.remotePickerChoices = choices
+	m.remotePickerLabels = labels
+	m.remotePickerCursor = cursor
+	m.state.ActiveOverlay = OverlayRemotePicker
+	return m
+}
+
+func (m Model) handleRemotePickerKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch {
+	case msg.Type == tea.KeyEsc:
+		m.state.ActiveOverlay = OverlayNone
+		return m, nil
+
+	case msg.String() == "j" || msg.Type == tea.KeyDown:
+		if m.remotePickerCursor < len(m.remotePickerChoices)-1 {
+			m.remotePickerCursor++
+		}
+		return m, nil
+
+	case msg.String() == "k" || msg.Type == tea.KeyUp:
+		if m.remotePickerCursor > 0 {
+			m.remotePickerCursor--
+		}
+		return m, nil
+
+	case msg.Type == tea.KeyEnter:
+		picked := m.remotePickerChoices[m.remotePickerCursor]
+		m.state.ActiveOverlay = OverlayNone
+		if picked == m.cfg.LastRemote {
+			m.state.StatusMsg = "Already connected to " + picked
+			return m, nil
+		}
+		if picked == "local" {
+			// Switch to local: re-connect with local SQLite.
+			m.state.StatusMsg = "Switching to local..."
+			return m, m.connectRemote("local", "")
+		}
+		// Remote selected — show password overlay.
+		rc := m.cfg.ActiveRemote(picked)
+		if rc == nil {
+			m.state.StatusMsg = "Remote not found: " + picked
+			return m, nil
+		}
+		m.pendingRemoteName = picked
+		m.passwordLabel = rc.Label()
+		m.passwordInput.Reset()
+		m.passwordInput.Focus()
+		m.state.ActiveOverlay = OverlayPasswordPrompt
+		return m, textinput.Blink
+	}
+	return m, nil
+}
+
+func (m Model) renderRemotePickerOverlay() string {
+	var b strings.Builder
+	b.WriteString("  Switch Database\n\n")
+	for i, label := range m.remotePickerLabels {
+		cursor := "  "
+		if i == m.remotePickerCursor {
+			cursor = "> "
+		}
+		suffix := ""
+		if m.remotePickerChoices[i] == m.cfg.LastRemote {
+			suffix = " (current)"
+		}
+		b.WriteString(fmt.Sprintf("  %s%s%s\n", cursor, label, suffix))
+	}
+	b.WriteString("\n  ↑/↓ navigate · Enter select · Esc cancel")
+	return m.styles.OverlayList.Render(b.String())
+}
+
+// ---- password overlay -------------------------------------------------------
+
+func (m Model) handlePasswordKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.Type {
+	case tea.KeyEsc:
+		m.state.ActiveOverlay = OverlayNone
+		m.pendingRemoteName = ""
+		m.passwordInput.Reset()
+		return m, nil
+
+	case tea.KeyEnter:
+		password := strings.TrimSpace(m.passwordInput.Value())
+		m.state.ActiveOverlay = OverlayNone
+		m.state.StatusMsg = "Connecting to " + m.pendingRemoteName + "..."
+		return m, m.connectRemote(m.pendingRemoteName, password)
+	}
+
+	var cmd tea.Cmd
+	m.passwordInput, cmd = m.passwordInput.Update(msg)
+	return m, cmd
+}
+
+func (m Model) renderPasswordOverlay() string {
+	var b strings.Builder
+	b.WriteString("  Connect to " + m.passwordLabel + "\n\n")
+	b.WriteString("  Password: " + m.passwordInput.View() + "\n\n")
+	b.WriteString("  Enter to connect · Esc to cancel")
+	return m.styles.OverlayList.Render(b.String())
+}
+
+// connectRemote fires an async command that calls ConnectFunc and returns
+// the result as a remoteConnectedMsg.
+func (m Model) connectRemote(remoteName, password string) tea.Cmd {
+	fn := m.connectFunc
+	return func() tea.Msg {
+		svc, err := fn(remoteName, password)
+		return remoteConnectedMsg{svc: svc, remoteName: remoteName, err: err}
+	}
 }

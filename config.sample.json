@@ -40,9 +40,19 @@
   ],
   "default_list": "",
   "last_list": "",
-  "remote_db": {
-    "driver": "mysql",
-    "dsn": "user:password@tcp(localhost:3306)/tork"
+  "remotes": {
+    "work": {
+      "driver": "mysql",
+      "host": "work-server.example.com",
+      "port": 3306,
+      "database": "tork",
+      "username": "alice"
+    },
+    "personal": {
+      "driver": "mysql",
+      "host": "personal-server.example.com",
+      "username": "alice"
+    }
   },
-  "username": "alice"
+  "last_remote": "work"
 }
