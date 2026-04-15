@@ -12,7 +12,20 @@ import (
 	"github.com/diptopandit/tork/internal/interface/tui"
 )
 
+// Set via -ldflags at build time.
+var (
+	version = "dev"
+	commit  = "unknown"
+	date    = "unknown"
+)
+
 func main() {
+	for _, arg := range os.Args[1:] {
+		if arg == "--version" || arg == "-v" {
+			fmt.Printf("tork %s (commit %s, built %s)\n", version, commit, date)
+			os.Exit(0)
+		}
+	}
 	// Config (loaded first so data_dir is available).
 	cfg, err := config.Load()
 	if err != nil {

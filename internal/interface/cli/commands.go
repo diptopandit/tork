@@ -13,11 +13,12 @@ import (
 )
 
 // NewRootCmd builds the Cobra root command wired to the given services.
-func NewRootCmd(taskSvc *application.TaskService, listSvc *application.ListService, cfg *config.Config) *cobra.Command {
+func NewRootCmd(taskSvc *application.TaskService, listSvc *application.ListService, cfg *config.Config, version string) *cobra.Command {
 	root := &cobra.Command{
-		Use:   "tork",
-		Short: "Terminal task manager",
-		Long:  "tork – a fast, offline-first terminal task manager.",
+		Use:     "tork",
+		Short:   "Terminal task manager",
+		Long:    "tork – a fast, offline-first terminal task manager.",
+		Version: version,
 	}
 
 	root.AddCommand(

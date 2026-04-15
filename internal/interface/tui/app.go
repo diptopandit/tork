@@ -384,6 +384,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			m.state.StatusMsg = "Connection failed: " + msg.err.Error() + " (using local)"
 			m.pendingRemoteName = ""
+			m.cfg.LastRemote = "local"
+			_ = config.Save(m.cfg)
 			return m, nil
 		}
 		// Close previous DB and swap services.
@@ -675,7 +677,7 @@ func (m Model) renderTabs() string {
 	tabBar := lipgloss.JoinHorizontal(lipgloss.Top, parts...)
 	leftPart := lipgloss.JoinHorizontal(lipgloss.Top, title, "  ", tabBar)
 
-	// Show active list name right-aligned.
+	// Show remote > list breadcrumb right-aligned.
 	listLabel := ""
 	for _, l := range m.state.TaskLists {
 		if l.ID == m.state.ActiveListID {
@@ -686,9 +688,22 @@ func (m Model) renderTabs() string {
 	if listLabel == "" && len(m.state.TaskLists) > 0 {
 		listLabel = m.state.TaskLists[0].Name
 	}
-	rightPart := ""
+
+	// Build breadcrumb: remote › list (or local › list).
+	var breadcrumb string
+	remote := m.cfg.LastRemote
+	if remote != "" && remote != "local" {
+		breadcrumb = remote
+	} else {
+		breadcrumb = "local"
+	}
 	if listLabel != "" {
-		rightPart = m.styles.ListLabel.Render("☰ " + listLabel)
+		breadcrumb += " › " + listLabel
+	}
+
+	rightPart := ""
+	if breadcrumb != "" {
+		rightPart = m.styles.ListLabel.Render("☰ " + breadcrumb)
 	}
 
 	gap := m.width - lipgloss.Width(leftPart) - lipgloss.Width(rightPart)
@@ -1725,9 +1740,10 @@ func (m Model) handlePasswordKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (m Model) renderPasswordOverlay() string {
 	var b strings.Builder
-	b.WriteString("  Connect to " + m.passwordLabel + "\n\n")
+	b.WriteString("  Connect to " + m.pendingRemoteName + "\n")
+	b.WriteString("  " + m.styles.HintText.Render(m.passwordLabel) + "\n\n")
 	b.WriteString("  Password: " + m.passwordInput.View() + "\n\n")
-	b.WriteString("  Enter to connect · Esc to cancel")
+	b.WriteString("  " + m.styles.HintText.Render("Enter to connect · Esc to cancel"))
 	return m.styles.OverlayList.Render(b.String())
 }
 

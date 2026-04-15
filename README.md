@@ -8,6 +8,7 @@
 [![Build](https://img.shields.io/badge/build-passing-brightgreen)](#development)
 [![Tests](https://img.shields.io/badge/tests-passing-brightgreen)](#development)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-blue)](#installation)
+[![Release](https://img.shields.io/github/v/release/diptopandit/tork?include_prereleases)](https://github.com/diptopandit/tork/releases)
 
 tork is a terminal-first task manager written in Go.
 
@@ -55,25 +56,54 @@ tork is built for engineers who want a local-first task manager that is:
 
 ## Installation
 
-### Option 1: Run from source (recommended right now)
+### Option 1: Install script (macOS / Linux)
+
+```bash
+curl -sSfL https://raw.githubusercontent.com/diptopandit/tork/main/install.sh | sh
+```
+
+This downloads the latest release and installs `tork` and `tork-cli` to `/usr/local/bin`. To install elsewhere:
+
+```bash
+INSTALL_DIR=~/.local/bin curl -sSfL https://raw.githubusercontent.com/diptopandit/tork/main/install.sh | sh
+```
+
+### Option 2: Download release binary
+
+Download the archive for your platform from [Releases](https://github.com/diptopandit/tork/releases), extract it, and move the binaries to a directory on your `PATH`:
+
+| Platform | Archive |
+|----------|---------|
+| macOS (Apple Silicon) | `tork_vX.Y.Z_darwin_arm64.tar.gz` |
+| macOS (Intel) | `tork_vX.Y.Z_darwin_amd64.tar.gz` |
+| Linux (x86_64) | `tork_vX.Y.Z_linux_amd64.tar.gz` |
+| Linux (ARM64) | `tork_vX.Y.Z_linux_arm64.tar.gz` |
+| Windows (x86_64) | `tork_vX.Y.Z_windows_amd64.zip` |
+| Windows (ARM64) | `tork_vX.Y.Z_windows_arm64.zip` |
+
+### Option 3: Install with `go install`
+
+Requires Go 1.22+:
+
+```bash
+go install github.com/diptopandit/tork/cmd/tork@latest
+go install github.com/diptopandit/tork/cmd/tork-cli@latest
+```
+
+### Option 4: Build from source
 
 ```bash
 git clone https://github.com/diptopandit/tork.git
 cd tork
-go run ./cmd/tork-cli --help
+make build
+# Binaries: build/tork and build/tork-cli
 ```
 
-### Option 2: Install CLI binary with go install
+### Verify installation
 
 ```bash
-go install github.com/diptopandit/tork/cmd/tork-cli@latest
-```
-
-### Option 3: Build local binaries
-
-```bash
-go build -o bin/tork-cli ./cmd/tork-cli
-go build -o bin/tork ./cmd/tork
+tork --version
+tork-cli --version
 ```
 
 ## Quick Start
@@ -81,15 +111,15 @@ go build -o bin/tork ./cmd/tork
 ### CLI
 
 ```bash
-go run ./cmd/tork-cli add "Ship README" --priority high --due 15-04-2026 --tags docs,release
-go run ./cmd/tork-cli list
-go run ./cmd/tork-cli search "README"
+tork-cli add "Ship README" --priority high --due 15-04-2026 --tags docs,release
+tork-cli list
+tork-cli search "README"
 ```
 
 ### TUI
 
 ```bash
-go run ./cmd/tork
+tork
 ```
 
 ## CLI Reference
@@ -98,41 +128,41 @@ go run ./cmd/tork
 
 | Command | Description |
 |---------|-------------|
-| `add <title>` | Create a new task |
-| `list` | List tasks (with optional filters) |
-| `show <id>` | Show full task details and updates |
-| `edit <id>` | Edit task fields (--title, --status, --priority, --due, --tags, --description) |
-| `status <id> <status>` | Change task status (todo/in_progress/done/cancelled) |
-| `done <id>` | Mark a task as done |
-| `delete <id>` | Delete a task |
-| `search <query>` | Full-text search tasks |
-| `update <id> <message>` | Add an update/comment to a task |
+| `tork-cli add <title>` | Create a new task |
+| `tork-cli list` | List tasks (with optional filters) |
+| `tork-cli show <id>` | Show full task details and updates |
+| `tork-cli edit <id>` | Edit task fields (--title, --status, --priority, --due, --tags, --description) |
+| `tork-cli status <id> <status>` | Change task status (todo/in_progress/done/cancelled) |
+| `tork-cli done <id>` | Mark a task as done |
+| `tork-cli delete <id>` | Delete a task |
+| `tork-cli search <query>` | Full-text search tasks |
+| `tork-cli update <id> <message>` | Add an update/comment to a task |
 
 ### List Management Commands
 
 | Command | Description |
 |---------|-------------|
-| `lists` | List all task lists |
-| `list-create <name>` | Create a new task list |
-| `list-rename <id> <name>` | Rename a task list |
-| `list-delete <id> --force` | Delete a list and all its tasks |
+| `tork-cli lists` | List all task lists |
+| `tork-cli list-create <name>` | Create a new task list |
+| `tork-cli list-rename <id> <name>` | Rename a task list |
+| `tork-cli list-delete <id> --force` | Delete a list and all its tasks |
 
 ### Examples
 
 ```bash
-go run ./cmd/tork-cli add "Pay cloud bill" --priority urgent --due 30-04-2026 --list Ops
-go run ./cmd/tork-cli list --status todo --priority high
-go run ./cmd/tork-cli show 3
-go run ./cmd/tork-cli edit 3 --title "New title" --priority high --status in_progress
-go run ./cmd/tork-cli status 3 in_progress
-go run ./cmd/tork-cli update 3 "Started working on this"
-go run ./cmd/tork-cli done 3
-go run ./cmd/tork-cli delete 3
-go run ./cmd/tork-cli search "cloud"
-go run ./cmd/tork-cli lists
-go run ./cmd/tork-cli list-create "Work"
-go run ./cmd/tork-cli list-rename abc123 "Personal"
-go run ./cmd/tork-cli list-delete abc123 --force
+tork-cli add "Pay cloud bill" --priority urgent --due 30-04-2026 --list Ops
+tork-cli list --status todo --priority high
+tork-cli show 3
+tork-cli edit 3 --title "New title" --priority high --status in_progress
+tork-cli status 3 in_progress
+tork-cli update 3 "Started working on this"
+tork-cli done 3
+tork-cli delete 3
+tork-cli search "cloud"
+tork-cli lists
+tork-cli list-create "Work"
+tork-cli list-rename abc123 "Personal"
+tork-cli list-delete abc123 --force
 ```
 
 Date format: DD-MM-YYYY (default) or YYYY-MM-DD (both accepted).
@@ -363,7 +393,7 @@ Password is prompted on each connection — it is never stored in config. The `u
 
 | Method | Example |
 |---|---|
-| CLI flag | `tork --remote work list` or `tork --local list` |
+| CLI flag | `tork-cli --remote work list` or `tork-cli --local list` |
 | TUI flag | `tork --remote work` or `tork --local` |
 | Last used | tork remembers your last selection (`last_remote` in config) |
 | Auto-connect | If `last_remote` is a remote, the TUI prompts for a password on startup and connects |

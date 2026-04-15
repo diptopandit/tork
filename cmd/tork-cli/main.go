@@ -11,6 +11,13 @@ import (
 	cli "github.com/diptopandit/tork/internal/interface/cli"
 )
 
+// Set via -ldflags at build time.
+var (
+	version = "dev"
+	commit  = "unknown"
+	date    = "unknown"
+)
+
 func main() {
 	cfg, err := config.Load()
 	if err != nil {
@@ -61,7 +68,7 @@ func main() {
 	}
 	defer svc.DB.Close()
 
-	root := cli.NewRootCmd(svc.TaskSvc, svc.ListSvc, cfg)
+	root := cli.NewRootCmd(svc.TaskSvc, svc.ListSvc, cfg, version)
 	if err := root.Execute(); err != nil {
 		os.Exit(1)
 	}
