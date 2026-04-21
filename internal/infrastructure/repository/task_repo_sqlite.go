@@ -275,9 +275,10 @@ func buildOrderClause(field domain.SortField, dir domain.SortDir) string {
 	}
 
 	d := "ASC"
-	if dir == domain.SortDesc {
+	switch dir {
+	case domain.SortDesc:
 		d = "DESC"
-	} else if dir == domain.SortAsc {
+	case domain.SortAsc:
 		d = "ASC"
 	}
 

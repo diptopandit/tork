@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/help"
@@ -134,6 +135,13 @@ type Model struct {
 	remotePickerCursor  int
 	remotePickerChoices []string // "local", remote names...
 	remotePickerLabels  []string
+	remoteAddMode       bool // true when adding a new remote
+	remoteAddStep       int  // 0=name, 1=host, 2=port, 3=database, 4=username
+	remoteAddInput      textinput.Model
+	remoteAddName       string // collected name so far
+	remoteAddHost       string
+	remoteAddPort       string
+	remoteAddDB         string
 
 	// Password overlay state
 	passwordInput     textinput.Model
@@ -170,6 +178,11 @@ func NewModel(
 	lsInput := textinput.New()
 	lsInput.Placeholder = "List name"
 	lsInput.CharLimit = 100
+
+	// Remote add input.
+	raInput := textinput.New()
+	raInput.Placeholder = "remote name"
+	raInput.CharLimit = 100
 
 	// Password input for remote connections.
 	pwInput := textinput.New()
@@ -223,6 +236,7 @@ func NewModel(
 		editView:        views.NewEditView(s, cfg.Statuses, cfg.Priorities),
 		filterView:      views.NewFilterView(s, cfg.Statuses, cfg.Priorities),
 		listSwitchInput: lsInput,
+		remoteAddInput:  raInput,
 		passwordInput:   pwInput,
 		connectFunc:     connectFunc,
 		currentDB:       currentDB,
@@ -844,6 +858,7 @@ func (m Model) helpContent() string {
 	b.WriteString("\n" + m.styles.HelpSection.Render("General") + "\n")
 	for _, bind := range []struct{ k, desc string }{
 		{"L", "Switch task list (n: new, r: rename, d: delete)"},
+		{"R", "Switch remote database (n: add new)"},
 		{"T", "Theme picker (live preview)"},
 		{"S", "Sort tasks"},
 		{"?", "Toggle this help"},
@@ -937,10 +952,7 @@ func (m Model) handleListKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.openSortPicker(), nil
 
 	case isKey(msg, m.keymap.RemoteSwitch):
-		if len(m.cfg.Remotes) > 0 {
-			return m.openRemotePicker(), nil
-		}
-		return m, nil
+		return m.openRemotePicker(), nil
 
 	case isKey(msg, m.keymap.Comment):
 		if t := m.listView.SelectedTask(); t != nil {
@@ -1036,10 +1048,7 @@ func (m Model) handleDetailKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.openSortPicker(), nil
 
 	case isKey(msg, m.keymap.RemoteSwitch):
-		if len(m.cfg.Remotes) > 0 {
-			return m.openRemotePicker(), nil
-		}
-		return m, nil
+		return m.openRemotePicker(), nil
 
 	case isKey(msg, m.keymap.Tab):
 		// Cycle detail sub-focus: details → updates → details
@@ -1653,6 +1662,89 @@ func (m Model) openRemotePicker() Model {
 }
 
 func (m Model) handleRemotePickerKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Add-remote mode: multi-step text input
+	if m.remoteAddMode {
+		switch msg.Type {
+		case tea.KeyEsc:
+			m.remoteAddMode = false
+			m.remoteAddStep = 0
+			m.remoteAddInput.Blur()
+			return m, nil
+		case tea.KeyEnter:
+			val := strings.TrimSpace(m.remoteAddInput.Value())
+			switch m.remoteAddStep {
+			case 0: // name
+				if val == "" || val == "local" {
+					return m, nil
+				}
+				m.remoteAddName = val
+				m.remoteAddStep = 1
+				m.remoteAddInput.SetValue("")
+				m.remoteAddInput.Placeholder = "host (e.g. db.example.com)"
+				return m, nil
+			case 1: // host
+				if val == "" {
+					return m, nil
+				}
+				m.remoteAddHost = val
+				m.remoteAddStep = 2
+				m.remoteAddInput.SetValue("3306")
+				m.remoteAddInput.Placeholder = "port"
+				return m, nil
+			case 2: // port
+				if val == "" {
+					val = "3306"
+				}
+				m.remoteAddPort = val
+				m.remoteAddStep = 3
+				m.remoteAddInput.SetValue("tork")
+				m.remoteAddInput.Placeholder = "database"
+				return m, nil
+			case 3: // database
+				if val == "" {
+					val = "tork"
+				}
+				m.remoteAddDB = val
+				m.remoteAddStep = 4
+				m.remoteAddInput.SetValue("")
+				m.remoteAddInput.Placeholder = "username"
+				return m, nil
+			case 4: // username
+				if val == "" {
+					return m, nil
+				}
+				// Build and save the new remote config.
+				port := 3306
+				if p, err := strconv.Atoi(m.remoteAddPort); err == nil && p > 0 {
+					port = p
+				}
+				rc := &config.RemoteConfig{
+					Driver:   "mysql",
+					Host:     m.remoteAddHost,
+					Port:     port,
+					Database: m.remoteAddDB,
+					Username: val,
+				}
+				if m.cfg.Remotes == nil {
+					m.cfg.Remotes = make(map[string]*config.RemoteConfig)
+				}
+				m.cfg.Remotes[m.remoteAddName] = rc
+				_ = config.Save(m.cfg)
+				m.state.StatusMsg = "Remote \"" + m.remoteAddName + "\" added"
+				// Reset add mode and refresh picker.
+				m.remoteAddMode = false
+				m.remoteAddStep = 0
+				m.remoteAddInput.Blur()
+				m = m.openRemotePicker()
+				return m, nil
+			}
+		}
+		var cmd tea.Cmd
+		m.remoteAddInput, cmd = m.remoteAddInput.Update(msg)
+		return m, cmd
+	}
+
+	// Selection mode
 	switch {
 	case msg.Type == tea.KeyEsc:
 		m.state.ActiveOverlay = OverlayNone
@@ -1667,6 +1759,28 @@ func (m Model) handleRemotePickerKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case msg.String() == "k" || msg.Type == tea.KeyUp:
 		if m.remotePickerCursor > 0 {
 			m.remotePickerCursor--
+		}
+		return m, nil
+
+	case msg.String() == "n" || msg.String() == "N":
+		m.remoteAddMode = true
+		m.remoteAddStep = 0
+		m.remoteAddInput.SetValue("")
+		m.remoteAddInput.Placeholder = "remote name"
+		m.remoteAddInput.Focus()
+		return m, textinput.Blink
+
+	case msg.String() == "d" || msg.String() == "D":
+		// Delete the selected remote (not "local").
+		if m.remotePickerCursor > 0 && m.remotePickerCursor < len(m.remotePickerChoices) {
+			name := m.remotePickerChoices[m.remotePickerCursor]
+			delete(m.cfg.Remotes, name)
+			if m.cfg.LastRemote == name {
+				m.cfg.LastRemote = "local"
+			}
+			_ = config.Save(m.cfg)
+			m.state.StatusMsg = "Remote \"" + name + "\" removed"
+			m = m.openRemotePicker()
 		}
 		return m, nil
 
@@ -1700,6 +1814,27 @@ func (m Model) handleRemotePickerKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (m Model) renderRemotePickerOverlay() string {
 	var b strings.Builder
+
+	if m.remoteAddMode {
+		b.WriteString("  Add Remote\n\n")
+		fields := []struct{ label, value string }{
+			{"Name", m.remoteAddName},
+			{"Host", m.remoteAddHost},
+			{"Port", m.remoteAddPort},
+			{"Database", m.remoteAddDB},
+			{"Username", ""},
+		}
+		for i, f := range fields {
+			if i < m.remoteAddStep {
+				b.WriteString(fmt.Sprintf("  %s: %s\n", f.label, m.styles.HintText.Render(f.value)))
+			} else if i == m.remoteAddStep {
+				b.WriteString(fmt.Sprintf("  %s: %s\n", f.label, m.remoteAddInput.View()))
+			}
+		}
+		b.WriteString("\n  " + m.styles.HintText.Render("Enter to continue · Esc to cancel"))
+		return m.styles.OverlayList.Render(b.String())
+	}
+
 	b.WriteString("  Switch Database\n\n")
 	for i, label := range m.remotePickerLabels {
 		cursor := "  "
@@ -1712,7 +1847,7 @@ func (m Model) renderRemotePickerOverlay() string {
 		}
 		b.WriteString(fmt.Sprintf("  %s%s%s\n", cursor, label, suffix))
 	}
-	b.WriteString("\n  ↑/↓ navigate · Enter select · Esc cancel")
+	b.WriteString("\n  ↑/↓ navigate · Enter select · n add · d delete · Esc cancel")
 	return m.styles.OverlayList.Render(b.String())
 }
 

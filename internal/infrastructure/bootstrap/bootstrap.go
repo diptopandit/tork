@@ -35,7 +35,7 @@ func Init(cfg *config.Config, remoteName string, password string, log logger.Log
 	}
 	rc := cfg.ActiveRemote(remoteName)
 	if rc != nil {
-		return initMySQL(cfg, remoteName, rc, password, log)
+		return initMySQL(remoteName, rc, password, log)
 	}
 	return initSQLite(cfg, log)
 }
@@ -70,7 +70,7 @@ func initSQLite(cfg *config.Config, log logger.Logger) (*Services, error) {
 	}, nil
 }
 
-func initMySQL(cfg *config.Config, remoteName string, rc *config.RemoteConfig, password string, log logger.Logger) (*Services, error) {
+func initMySQL(remoteName string, rc *config.RemoteConfig, password string, log logger.Logger) (*Services, error) {
 	log.Info("connecting to mysql",
 		zap.String("remote", remoteName),
 		zap.String("host", rc.Host),

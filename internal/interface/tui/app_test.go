@@ -994,13 +994,13 @@ func TestPasswordOverlay_EscCloses(t *testing.T) {
 
 // ---- remote picker tests ----------------------------------------------------
 
-func TestRemotePicker_NoRemotesNoop(t *testing.T) {
+func TestRemotePicker_NoRemotesOpens(t *testing.T) {
 	m := sizedModel()
-	// No remotes configured — RemoteSwitch should be a no-op
+	// No remotes configured — RemoteSwitch should still open (user can add)
 	newModel, _ := m.Update(keyMsg("R"))
 	nm := newModel.(Model)
-	if nm.state.ActiveOverlay != OverlayNone {
-		t.Error("remote picker should not open without configured remotes")
+	if nm.state.ActiveOverlay != OverlayRemotePicker {
+		t.Error("remote picker should open even without configured remotes")
 	}
 }
 

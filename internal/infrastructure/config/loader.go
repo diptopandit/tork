@@ -115,9 +115,13 @@ func Load() (*Config, error) {
 
 	data, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
-		// No config file — apply default theme and return.
+		// No config file — create default config on first run.
 		tf := BuiltinThemes["default"]
 		ApplyTheme(&cfg, tf)
+		if saveErr := Save(&cfg); saveErr != nil {
+			// Best-effort: app works without a config file.
+			fmt.Fprintf(os.Stderr, "warning: could not create default config: %v\n", saveErr)
+		}
 		return &cfg, nil
 	}
 	if err != nil {
