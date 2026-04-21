@@ -3,7 +3,7 @@
 MODULE   := github.com/diptopandit/tork
 BUILD_DIR := build
 DIST_DIR  := dist
-VERSION  ?= $(shell cat VERSION 2>/dev/null || echo 0.0.0)
+VERSION  ?= v$(shell cat VERSION 2>/dev/null || echo 0.0.0)
 COMMIT   ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 DATE     ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 LDFLAGS  := -s -w \
@@ -26,7 +26,7 @@ PLATFORMS := \
 	windows_amd64 \
 	windows_arm64
 
-.PHONY: all build tui cli clean test vet fmt lint install release release-all help
+.PHONY: all build tui cli clean test test-coverage test-coverage-html vet fmt lint install release release-all help
 
 ## all: build both binaries for the current platform (default)
 all: build
@@ -55,6 +55,18 @@ clean:
 ## test: run all tests
 test:
 	go test ./...
+
+## test-coverage: run tests with coverage report
+test-coverage:
+	go test -coverprofile=coverage.out -count=1 ./...
+	go tool cover -func=coverage.out
+	@echo ""
+	@echo "Coverage profile: coverage.out"
+
+## test-coverage-html: generate HTML coverage report and open it
+test-coverage-html: test-coverage
+	go tool cover -html=coverage.out -o coverage.html
+	@echo "HTML report: coverage.html"
 
 ## test-integration: run MySQL integration tests (requires Docker)
 test-integration:

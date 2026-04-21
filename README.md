@@ -9,6 +9,7 @@
 [![Tests](https://img.shields.io/badge/tests-passing-brightgreen)](#development)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-blue)](#installation)
 [![Release](https://img.shields.io/github/v/release/diptopandit/tork?include_prereleases)](https://github.com/diptopandit/tork/releases)
+[![Coverage](https://img.shields.io/badge/coverage-43%25-yellow)](#development)
 
 tork is a terminal-first task manager written in Go.
 
@@ -30,6 +31,7 @@ It provides:
 - [Data, Config, and Logs](#data-config-and-logs)
 - [Logging and Debugging](#logging-and-debugging)
 - [Remote Database (MySQL)](#remote-database-mysql)
+- [Development](#development)
 - [Roadmap](#roadmap)
 - [Security](#security)
 - [License](#license)
@@ -476,6 +478,42 @@ Multiple tork instances can connect to the same MySQL database simultaneously. E
 ### Schema Differences
 
 The MySQL schema includes additional tables (`users`, `list_members`) and columns (`owner_id`, `visibility` on `task_lists`) for multi-user support. Full-text search uses MySQL `FULLTEXT` indexes instead of SQLite FTS5. The SQLite schema is unchanged and fully backward compatible.
+
+## Development
+
+### Running Tests
+
+```bash
+# Unit tests
+make test
+
+# Tests with coverage report
+make test-coverage
+
+# HTML coverage report (opens in browser)
+make test-coverage-html
+
+# Integration tests (requires Docker — spins up MySQL)
+make test-integration
+```
+
+### Coverage
+
+Coverage runs on every push and pull request via GitHub Actions. The workflow uploads a coverage report as a build artifact.
+
+| Command | Description |
+|---------|-------------|
+| `make test` | Run all unit tests |
+| `make test-coverage` | Run tests and print per-function coverage |
+| `make test-coverage-html` | Generate `coverage.html` report |
+| `make test-integration` | Run full suite including MySQL integration tests |
+
+### Building
+
+```bash
+make build              # build/tork and build/tork-cli
+make release-all        # cross-compile for all platforms
+```
 
 ## Roadmap
 
