@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>tork — Terminal Task Manager</title>
+<meta name="description" content="A fast, terminal-first task manager written in Go with TUI, CLI, SQLite, and optional MySQL backend.">
+<style>
+  :root {
+    --bg: #0d1117; --bg2: #161b22; --border: #30363d;
+    --text: #c9d1d9; --muted: #8b949e; --accent: #58a6ff;
+    --green: #3fb950; --purple: #bc8cff; --orange: #d29922;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg); color: var(--text); line-height: 1.6;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code, .mono { font-family: "SF Mono", Menlo, Consolas, monospace; }
+
+  /* Hero */
+  .hero {
+    text-align: center; padding: 5rem 2rem 3rem;
+    background: linear-gradient(180deg, #0d1117 0%, #161b22 100%);
+  }
+  .hero img { width: 120px; margin-bottom: 1.5rem; }
+  .hero h1 { font-size: 3rem; font-weight: 700; margin-bottom: 0.5rem; }
+  .hero h1 span { color: var(--accent); }
+  .hero p { font-size: 1.25rem; color: var(--muted); max-width: 600px; margin: 0 auto 2rem; }
+  .hero-actions { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
+  .btn {
+    display: inline-block; padding: 0.75rem 1.5rem; border-radius: 8px;
+    font-size: 1rem; font-weight: 600; transition: opacity 0.2s;
+  }
+  .btn:hover { opacity: 0.85; text-decoration: none; }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-outline { border: 1px solid var(--border); color: var(--text); }
+
+  /* Install banner */
+  .install-banner {
+    text-align: center; padding: 1.5rem 2rem;
+    background: var(--bg2); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+  }
+  .install-cmd {
+    display: inline-block; background: var(--bg); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.75rem 1.5rem; font-size: 0.95rem; color: var(--green);
+    user-select: all;
+  }
+
+  /* Section */
+  .section { max-width: 960px; margin: 0 auto; padding: 4rem 2rem; }
+  .section h2 {
+    font-size: 1.75rem; margin-bottom: 0.5rem;
+    border-bottom: 2px solid var(--border); padding-bottom: 0.5rem;
+  }
+  .section .subtitle { color: var(--muted); margin-bottom: 2rem; }
+
+  /* Feature grid */
+  .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1.5rem; }
+  .feature {
+    background: var(--bg2); border: 1px solid var(--border); border-radius: 10px;
+    padding: 1.5rem;
+  }
+  .feature h3 { font-size: 1.1rem; margin-bottom: 0.5rem; }
+  .feature .icon { font-size: 1.5rem; margin-bottom: 0.5rem; display: block; }
+  .feature p { color: var(--muted); font-size: 0.92rem; }
+
+  /* Two-column */
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-top: 1.5rem; }
+  @media (max-width: 640px) { .two-col { grid-template-columns: 1fr; } }
+
+  /* Code block */
+  pre.code-block {
+    background: var(--bg2); border: 1px solid var(--border); border-radius: 8px;
+    padding: 1.25rem 1.5rem; overflow-x: auto; font-size: 0.88rem; line-height: 1.7;
+    color: var(--text);
+  }
+  pre.code-block .prompt { color: var(--green); }
+  pre.code-block .comment { color: var(--muted); }
+
+  /* Keybindings table */
+  .key-table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+  .key-table th {
+    text-align: left; padding: 0.5rem 0.75rem; border-bottom: 2px solid var(--border);
+    color: var(--muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em;
+  }
+  .key-table td { padding: 0.4rem 0.75rem; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
+  .key-table kbd {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 4px;
+    padding: 0.1rem 0.4rem; font-size: 0.82rem; font-family: inherit;
+  }
+
+  /* Download grid */
+  .dl-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-top: 1.5rem; }
+  .dl-card {
+    background: var(--bg2); border: 1px solid var(--border); border-radius: 8px;
+    padding: 1.25rem; text-align: center;
+  }
+  .dl-card .platform { font-weight: 600; margin-bottom: 0.25rem; }
+  .dl-card .arch { color: var(--muted); font-size: 0.85rem; margin-bottom: 0.75rem; }
+  .dl-card a { font-size: 0.9rem; }
+
+  /* Screenshots */
+  .screenshots { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 1.5rem; margin-top: 1.5rem; }
+  @media (max-width: 640px) { .screenshots { grid-template-columns: 1fr; } }
+  .screenshot {
+    background: var(--bg2); border: 1px solid var(--border); border-radius: 10px;
+    overflow: hidden;
+  }
+  .screenshot img {
+    width: 100%; height: auto; display: block;
+  }
+  .screenshot .placeholder {
+    display: flex; align-items: center; justify-content: center;
+    height: 280px; color: var(--muted); font-size: 0.9rem;
+    border: 2px dashed var(--border); margin: 1rem; border-radius: 6px;
+  }
+  .screenshot .caption {
+    padding: 0.75rem 1rem; font-size: 0.88rem; color: var(--muted);
+    border-top: 1px solid var(--border);
+  }
+
+  /* TUI detail list */
+  .tui-details { margin-top: 1.5rem; }
+  .tui-detail {
+    background: var(--bg2); border: 1px solid var(--border); border-radius: 8px;
+    padding: 1.25rem 1.5rem; margin-bottom: 1rem;
+  }
+  .tui-detail h3 { font-size: 1rem; margin-bottom: 0.4rem; }
+  .tui-detail p { color: var(--muted); font-size: 0.9rem; }
+
+  /* Footer */
+  footer {
+    text-align: center; padding: 2rem; color: var(--muted); font-size: 0.85rem;
+    border-top: 1px solid var(--border);
+  }
+</style>
+</head>
+<body>
+
+<!-- Hero -->
+<section class="hero">
+  <img src="https://raw.githubusercontent.com/diptopandit/tork/main/assets/logo.png" alt="tork logo">
+  <h1><span>tork</span></h1>
+  <p>A fast, terminal-first task manager built in Go. TUI + CLI + SQLite + optional MySQL backend.</p>
+  <div class="hero-actions">
+    <a class="btn btn-primary" href="#install">Install</a>
+    <a class="btn btn-outline" href="https://github.com/diptopandit/tork">GitHub</a>
+    <a class="btn btn-outline" href="https://github.com/diptopandit/tork/releases/latest">Download</a>
+  </div>
+</section>
+
+<!-- Install -->
+<div class="install-banner" id="install">
+  <code class="install-cmd">curl -sSfL https://raw.githubusercontent.com/diptopandit/tork/main/install.sh | sh</code>
+</div>
+
+<!-- Screenshots -->
+<section class="section">
+  <h2>Screenshots</h2>
+  <p class="subtitle">See tork in action.</p>
+  <div class="screenshots">
+    <div class="screenshot">
+      <img src="screenshots/tui-main.png" alt="TUI main view">
+      <div class="caption">Split-pane TUI &mdash; task list on the left, detail view with scrollable updates on the right.</div>
+    </div>
+    <div class="screenshot">
+      <img src="screenshots/tui-remotes.png" alt="TUI remote picker">
+      <div class="caption">Remote picker &mdash; add, connect to, or remove MySQL backends directly from the TUI.</div>
+    </div>
+    <div class="screenshot">
+      <img src="screenshots/tui-themes.png" alt="TUI theme picker">
+      <div class="caption">Theme picker &mdash; switch between built-in themes with live preview, or load custom themes from JSON files.</div>
+    </div>
+    <div class="screenshot">
+      <img src="screenshots/cli.png" alt="CLI usage">
+      <div class="caption">CLI &mdash; fast, scriptable task management from any shell.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Features -->
+<section class="section">
+  <h2>Features</h2>
+  <p class="subtitle">Everything you need to manage tasks without leaving the terminal.</p>
+  <div class="features">
+    <div class="feature">
+      <span class="icon">&#9618;</span>
+      <h3>Split-pane TUI</h3>
+      <p>Bubble Tea powered interactive interface with task list, detail view, scrollable updates, and inline editing.</p>
+    </div>
+    <div class="feature">
+      <span class="icon">&#9000;</span>
+      <h3>Powerful CLI</h3>
+      <p>Scriptable Cobra commands for add, edit, search, list, status changes, and task updates.</p>
+    </div>
+    <div class="feature">
+      <span class="icon">&#128269;</span>
+      <h3>Full-text search</h3>
+      <p>SQLite FTS5 powered search across titles, descriptions, tags, and updates.</p>
+    </div>
+    <div class="feature">
+      <span class="icon">&#127912;</span>
+      <h3>Themes</h3>
+      <p>5 built-in themes (default, light, dracula, solarized-dark, nord) plus custom JSON theme files.</p>
+    </div>
+    <div class="feature">
+      <span class="icon">&#128450;</span>
+      <h3>Task lists</h3>
+      <p>Create, rename, delete, and switch between multiple task lists. Organize work your way.</p>
+    </div>
+    <div class="feature">
+      <span class="icon">&#9729;</span>
+      <h3>Remote MySQL</h3>
+      <p>Optional multi-user mode with shared and private task lists on a MySQL backend. Add/remove remotes from the TUI.</p>
+    </div>
+    <div class="feature">
+      <span class="icon">&#9881;</span>
+      <h3>Configurable</h3>
+      <p>Custom keybindings, date formats, statuses, priorities, display columns, and tab order via JSON config.</p>
+    </div>
+    <div class="feature">
+      <span class="icon">&#128218;</span>
+      <h3>Structured logging</h3>
+      <p>JSON structured logs for debugging. Configurable log level and output path.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Quick Start -->
+<section class="section">
+  <h2>Quick Start</h2>
+  <p class="subtitle">Up and running in seconds.</p>
+  <div class="two-col">
+    <div>
+      <h3 style="margin-bottom: 0.75rem;">CLI</h3>
+      <pre class="code-block"><span class="prompt">$</span> tork-cli add "Ship README" --priority high --due 15-04-2026
+<span class="comment"># Task #1 created</span>
+
+<span class="prompt">$</span> tork-cli list
+<span class="comment"># ID  Title          Status  Priority  Due</span>
+<span class="comment"># 1   Ship README    todo    high      15-04-2026</span>
+
+<span class="prompt">$</span> tork-cli done 1
+<span class="comment"># Task #1 marked as done</span></pre>
+    </div>
+    <div>
+      <h3 style="margin-bottom: 0.75rem;">TUI</h3>
+      <pre class="code-block"><span class="prompt">$</span> tork
+<span class="comment"># Launches the interactive TUI</span></pre>
+    </div>
+  </div>
+</section>
+
+<!-- TUI Deep Dive -->
+<section class="section">
+  <h2>The TUI Experience</h2>
+  <p class="subtitle">A full-featured terminal interface built with Bubble Tea.</p>
+  <div class="tui-details">
+    <div class="tui-detail">
+      <h3>Split-pane layout</h3>
+      <p>Left pane shows your task list in a sortable table with status tabs across the top. Right pane displays the selected task's full detail &mdash; title, status, priority, due date, tags, description &mdash; plus a scrollable timeline of updates.</p>
+    </div>
+    <div class="tui-detail">
+      <h3>Inline editing</h3>
+      <p>Press <kbd>n</kbd> to create a new task or <kbd>e</kbd> to edit the selected one. A modal overlay appears right in the terminal &mdash; tab through fields, type your changes, and press Enter to save. No context switching required.</p>
+    </div>
+    <div class="tui-detail">
+      <h3>Task updates &amp; comments</h3>
+      <p>Press <kbd>u</kbd> to add a timestamped update to any task. Updates appear in a scrollable pane below the task detail, creating an immutable activity log for each task.</p>
+    </div>
+    <div class="tui-detail">
+      <h3>Status tabs &amp; sorting</h3>
+      <p>Tab through status categories (All, Todo, In Progress, Done, Cancelled) to filter the list. Press <kbd>o</kbd> to open the sort overlay and order by title, priority, due date, or creation time.</p>
+    </div>
+    <div class="tui-detail">
+      <h3>Multiple task lists</h3>
+      <p>Press <kbd>L</kbd> to open the list picker. Create, rename, and delete lists. Switch between them instantly &mdash; each list maintains its own tasks and state.</p>
+    </div>
+    <div class="tui-detail">
+      <h3>Remote management</h3>
+      <p>Press <kbd>R</kbd> to open the remote picker. Add new MySQL remotes, connect to shared databases, or remove backends &mdash; all without leaving the TUI. Config is auto-created on first run.</p>
+    </div>
+    <div class="tui-detail">
+      <h3>Themes &amp; customization</h3>
+      <p>Press <kbd>T</kbd> to open the theme picker with live preview. Choose from 5 built-in themes or point to a custom JSON file. Keybindings, date format, columns, and tab order are all configurable.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Keybindings -->
+<section class="section">
+  <h2>TUI Keybindings</h2>
+  <p class="subtitle">Vim-inspired navigation with intuitive task actions.</p>
+  <div class="two-col">
+    <div>
+      <table class="key-table">
+        <thead><tr><th>Key</th><th>Action</th></tr></thead>
+        <tbody>
+          <tr><td><kbd>j</kbd> / <kbd>k</kbd></td><td>Move down / up</td></tr>
+          <tr><td><kbd>h</kbd> / <kbd>l</kbd></td><td>Focus left / right pane</td></tr>
+          <tr><td><kbd>Tab</kbd></td><td>Next status tab / cycle sections</td></tr>
+          <tr><td><kbd>/</kbd></td><td>Search tasks</td></tr>
+          <tr><td><kbd>Esc</kbd></td><td>Cancel / close</td></tr>
+          <tr><td><kbd>q</kbd></td><td>Quit</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div>
+      <table class="key-table">
+        <thead><tr><th>Key</th><th>Action</th></tr></thead>
+        <tbody>
+          <tr><td><kbd>n</kbd></td><td>New task</td></tr>
+          <tr><td><kbd>e</kbd></td><td>Edit task</td></tr>
+          <tr><td><kbd>s</kbd></td><td>Cycle status</td></tr>
+          <tr><td><kbd>x</kbd></td><td>Mark done</td></tr>
+          <tr><td><kbd>d</kbd></td><td>Delete task</td></tr>
+          <tr><td><kbd>u</kbd></td><td>Add update comment</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- Download -->
+<section class="section" id="download">
+  <h2>Download</h2>
+  <p class="subtitle">Pre-built binaries for every major platform.</p>
+  <div class="dl-grid">
+    <div class="dl-card">
+      <div class="platform">macOS</div>
+      <div class="arch">Apple Silicon (ARM64)</div>
+      <a href="https://github.com/diptopandit/tork/releases/latest/download/tork_v1.0.1_darwin_arm64.tar.gz">.tar.gz</a>
+    </div>
+    <div class="dl-card">
+      <div class="platform">macOS</div>
+      <div class="arch">Intel (AMD64)</div>
+      <a href="https://github.com/diptopandit/tork/releases/latest/download/tork_v1.0.1_darwin_amd64.tar.gz">.tar.gz</a>
+    </div>
+    <div class="dl-card">
+      <div class="platform">Linux</div>
+      <div class="arch">x86_64 (AMD64)</div>
+      <a href="https://github.com/diptopandit/tork/releases/latest/download/tork_v1.0.1_linux_amd64.tar.gz">.tar.gz</a>
+    </div>
+    <div class="dl-card">
+      <div class="platform">Linux</div>
+      <div class="arch">ARM64</div>
+      <a href="https://github.com/diptopandit/tork/releases/latest/download/tork_v1.0.1_linux_arm64.tar.gz">.tar.gz</a>
+    </div>
+    <div class="dl-card">
+      <div class="platform">Windows</div>
+      <div class="arch">x86_64 (AMD64)</div>
+      <a href="https://github.com/diptopandit/tork/releases/latest/download/tork_v1.0.1_windows_amd64.zip">.zip</a>
+    </div>
+    <div class="dl-card">
+      <div class="platform">Windows</div>
+      <div class="arch">ARM64</div>
+      <a href="https://github.com/diptopandit/tork/releases/latest/download/tork_v1.0.1_windows_arm64.zip">.zip</a>
+    </div>
+  </div>
+  <p style="text-align: center; margin-top: 1.5rem;">
+    Or install with Go: <code class="mono" style="color: var(--green);">go install github.com/diptopandit/tork/cmd/tork@latest</code>
+  </p>
+</section>
+
+<!-- Footer -->
+<footer>
+  <p>
+    <a href="https://github.com/diptopandit/tork">GitHub</a> &middot;
+    <a href="https://github.com/diptopandit/tork/releases">Releases</a> &middot;
+    <a href="https://github.com/diptopandit/tork/blob/main/LICENSE">MIT License</a>
+  </p>
+  <p style="margin-top: 0.5rem;">&copy; 2026 Dipto Pandit</p>
+</footer>
+
+</body>
+</html>
