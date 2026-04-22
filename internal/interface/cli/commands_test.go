@@ -423,3 +423,372 @@ func TestVersionOutput(t *testing.T) {
 		t.Errorf("output = %q, missing v1.0.0", buf.String())
 	}
 }
+
+// ---- show/edit/status/done/delete/search/update command tests ---------------
+
+func addTestTask(t *testing.T) (*application.TaskService, *application.ListService) {
+	t.Helper()
+	taskSvc, listSvc := testServices()
+	// Create a list and a task so commands have something to operate on.
+	root := NewRootCmd(taskSvc, listSvc, testCfg(), "test")
+	root.SetOut(new(bytes.Buffer))
+	root.SetErr(new(bytes.Buffer))
+	root.SetArgs([]string{"add", "Test task", "--priority", "high", "--due", "30-04-2026", "--tags", "go,test", "--description", "A test task"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("setup add: %v", err)
+	}
+	return taskSvc, listSvc
+}
+
+func TestShowCmd_Success(t *testing.T) {
+	taskSvc, listSvc := addTestTask(t)
+	root := NewRootCmd(taskSvc, listSvc, testCfg(), "test")
+	root.SetOut(new(bytes.Buffer))
+	root.SetArgs([]string{"show", "1"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("show: %v", err)
+	}
+}
+
+func TestShowCmd_NotFound(t *testing.T) {
+	taskSvc, listSvc := testServices()
+	root := NewRootCmd(taskSvc, listSvc, testCfg(), "test")
+	root.SilenceErrors = true
+	root.SilenceUsage = true
+	root.SetArgs([]string{"show", "999"})
+	if err := root.Execute(); err == nil {
+		t.Error("expected error for nonexistent task")
+	}
+}
+
+func TestEditCmd_ChangeTitle(t *testing.T) {
+	taskSvc, listSvc := addTestTask(t)
+	root := NewRootCmd(taskSvc, listSvc, testCfg(), "test")
+	root.SetOut(new(bytes.Buffer))
+	root.SetArgs([]string{"edit", "1", "--title", "Updated title"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("edit title: %v", err)
+	}
+}
+
+func TestEditCmd_ChangeStatus(t *testing.T) {
+	taskSvc, listSvc := addTestTask(t)
+	root := NewRootCmd(taskSvc, listSvc, testCfg(), "test")
+	root.SetOut(new(bytes.Buffer))
+	root.SetArgs([]string{"edit", "1", "--status", "in_progress"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("edit status: %v", err)
+	}
+}
+
+func TestEditCmd_ChangePriority(t *testing.T) {
+	taskSvc, listSvc := addTestTask(t)
+	root := NewRootCmd(taskSvc, listSvc, testCfg(), "test")
+	root.SetOut(new(bytes.Buffer))
+	root.SetArgs([]string{"edit", "1", "--priority", "urgent"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("edit priority: %v", err)
+	}
+}
+
+func TestEditCmd_ChangeDue(t *testing.T) {
+	taskSvc, listSvc := addTestTask(t)
+	root := NewRootCmd(taskSvc, listSvc, testCfg(), "test")
+	root.SetOut(new(bytes.Buffer))
+	root.SetArgs([]string{"edit", "1", "--due", "2026-12-31"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("edit due: %v", err)
+	}
+}
+
+func TestEditCmd_ChangeTags(t *testing.T) {
+	taskSvc, listSvc := addTestTask(t)
+	root := NewRootCmd(taskSvc, listSvc, testCfg(), "test")
+	root.SetOut(new(bytes.Buffer))
+	root.SetArgs([]string{"edit", "1", "--tags", "new,tags"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("edit tags: %v", err)
+	}
+}
+
+func TestEditCmd_ChangeDescription(t *testing.T) {
+	taskSvc, listSvc := addTestTask(t)
+	root := NewRootCmd(taskSvc, listSvc, testCfg(), "test")
+	root.SetOut(new(bytes.Buffer))
+	root.SetArgs([]string{"edit", "1", "--description", "New desc"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("edit description: %v", err)
+	}
+}
+
+func TestEditCmd_InvalidStatus(t *testing.T) {
+	taskSvc, listSvc := addTestTask(t)
+	root := NewRootCmd(taskSvc, listSvc, testCfg(), "test")
+	root.SilenceErrors = true
+	root.SilenceUsage = true
+	root.SetArgs([]string{"edit", "1", "--status", "bogus"})
+	if err := root.Execute(); err == nil {
+		t.Error("expected error for invalid status")
+	}
+}
+
+func TestEditCmd_InvalidPriority(t *testing.T) {
+	taskSvc, listSvc := addTestTask(t)
+	root := NewRootCmd(taskSvc, listSvc, testCfg(), "test")
+	root.SilenceErrors = true
+	root.SilenceUsage = true
+	root.SetArgs([]string{"edit", "1", "--priority", "bogus"})
+	if err := root.Execute(); err == nil {
+		t.Error("expected error for invalid priority")
+	}
+}
+
+func TestEditCmd_InvalidDue(t *testing.T) {
+	taskSvc, listSvc := addTestTask(t)
+	root := NewRootCmd(taskSvc, listSvc, testCfg(), "test")
+	root.SilenceErrors = true
+	root.SilenceUsage = true
+	root.SetArgs([]string{"edit", "1", "--due", "bad-date"})
+	if err := root.Execute(); err == nil {
+		t.Error("expected error for invalid date")
+	}
+}
+
+func TestStatusCmd_Success(t *testing.T) {
+	taskSvc, listSvc := addTestTask(t)
+	root := NewRootCmd(taskSvc, listSvc, testCfg(), "test")
+	root.SetOut(new(bytes.Buffer))
+	root.SetArgs([]string{"status", "1", "in_progress"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("status: %v", err)
+	}
+}
+
+func TestStatusCmd_InvalidStatus(t *testing.T) {
+	taskSvc, listSvc := addTestTask(t)
+	root := NewRootCmd(taskSvc, listSvc, testCfg(), "test")
+	root.SilenceErrors = true
+	root.SilenceUsage = true
+	root.SetArgs([]string{"status", "1", "invalid"})
+	if err := root.Execute(); err == nil {
+		t.Error("expected error for invalid status")
+	}
+}
+
+func TestDoneCmd_Success(t *testing.T) {
+	taskSvc, listSvc := addTestTask(t)
+	root := NewRootCmd(taskSvc, listSvc, testCfg(), "test")
+	root.SetOut(new(bytes.Buffer))
+	root.SetArgs([]string{"done", "1"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("done: %v", err)
+	}
+}
+
+func TestDeleteCmd_Success(t *testing.T) {
+	taskSvc, listSvc := addTestTask(t)
+	root := NewRootCmd(taskSvc, listSvc, testCfg(), "test")
+	root.SetOut(new(bytes.Buffer))
+	root.SetArgs([]string{"delete", "1"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+}
+
+func TestSearchCmd_WithResults(t *testing.T) {
+	taskSvc, listSvc := addTestTask(t)
+	root := NewRootCmd(taskSvc, listSvc, testCfg(), "test")
+	root.SetOut(new(bytes.Buffer))
+	// Our stub search returns empty, but ListTasks returns all tasks via stub repo.
+	// So "search X" will show "No results" since stub search returns nil IDs.
+	root.SetArgs([]string{"search", "test"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("search: %v", err)
+	}
+}
+
+func TestUpdateCmd_Success(t *testing.T) {
+	taskSvc, listSvc := addTestTask(t)
+	root := NewRootCmd(taskSvc, listSvc, testCfg(), "test")
+	root.SetOut(new(bytes.Buffer))
+	root.SetArgs([]string{"update", "1", "Progress update here"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+}
+
+func TestUpdateCmd_NoMessage(t *testing.T) {
+	taskSvc, listSvc := addTestTask(t)
+	root := NewRootCmd(taskSvc, listSvc, testCfg(), "test")
+	root.SilenceErrors = true
+	root.SilenceUsage = true
+	root.SetArgs([]string{"update", "1"})
+	if err := root.Execute(); err == nil {
+		t.Error("expected error for missing message")
+	}
+}
+
+func TestListCmd_WithStatusFilter(t *testing.T) {
+	taskSvc, listSvc := addTestTask(t)
+	root := NewRootCmd(taskSvc, listSvc, testCfg(), "test")
+	root.SetOut(new(bytes.Buffer))
+	root.SetArgs([]string{"list", "--status", "todo"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("list with status: %v", err)
+	}
+}
+
+func TestListCmd_WithPriorityFilter(t *testing.T) {
+	taskSvc, listSvc := addTestTask(t)
+	root := NewRootCmd(taskSvc, listSvc, testCfg(), "test")
+	root.SetOut(new(bytes.Buffer))
+	root.SetArgs([]string{"list", "--priority", "high"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("list with priority: %v", err)
+	}
+}
+
+func TestListCmd_WithTasks(t *testing.T) {
+	taskSvc, listSvc := addTestTask(t)
+	root := NewRootCmd(taskSvc, listSvc, testCfg(), "test")
+	buf := new(bytes.Buffer)
+	root.SetOut(buf)
+	root.SetArgs([]string{"list"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("list: %v", err)
+	}
+}
+
+func TestListCmd_InvalidStatus(t *testing.T) {
+	taskSvc, listSvc := testServices()
+	root := NewRootCmd(taskSvc, listSvc, testCfg(), "test")
+	root.SilenceErrors = true
+	root.SilenceUsage = true
+	root.SetArgs([]string{"list", "--status", "bogus"})
+	if err := root.Execute(); err == nil {
+		t.Error("expected error for invalid status filter")
+	}
+}
+
+func TestListCmd_InvalidPriority(t *testing.T) {
+	taskSvc, listSvc := testServices()
+	root := NewRootCmd(taskSvc, listSvc, testCfg(), "test")
+	root.SilenceErrors = true
+	root.SilenceUsage = true
+	root.SetArgs([]string{"list", "--priority", "bogus"})
+	if err := root.Execute(); err == nil {
+		t.Error("expected error for invalid priority filter")
+	}
+}
+
+func TestListRenameCmd_Success(t *testing.T) {
+	taskSvc, listSvc := testServices()
+	// Create a list first.
+	root := NewRootCmd(taskSvc, listSvc, testCfg(), "test")
+	root.SetOut(new(bytes.Buffer))
+	root.SetErr(new(bytes.Buffer))
+	root.SetArgs([]string{"list-create", "Work"})
+	root.Execute()
+
+	// Get the list ID.
+	lists, _ := listSvc.GetAllLists()
+	if len(lists) == 0 {
+		t.Fatal("no lists created")
+	}
+
+	root2 := NewRootCmd(taskSvc, listSvc, testCfg(), "test")
+	root2.SetOut(new(bytes.Buffer))
+	root2.SetArgs([]string{"list-rename", lists[0].ID, "Personal"})
+	if err := root2.Execute(); err != nil {
+		t.Fatalf("list-rename: %v", err)
+	}
+}
+
+func TestListDeleteCmd_WithForce(t *testing.T) {
+	taskSvc, listSvc := testServices()
+	root := NewRootCmd(taskSvc, listSvc, testCfg(), "test")
+	root.SetOut(new(bytes.Buffer))
+	root.SetErr(new(bytes.Buffer))
+	root.SetArgs([]string{"list-create", "Temp"})
+	root.Execute()
+
+	lists, _ := listSvc.GetAllLists()
+	if len(lists) == 0 {
+		t.Fatal("no lists")
+	}
+
+	root2 := NewRootCmd(taskSvc, listSvc, testCfg(), "test")
+	root2.SetOut(new(bytes.Buffer))
+	root2.SetArgs([]string{"list-delete", lists[0].ID, "--force"})
+	if err := root2.Execute(); err != nil {
+		t.Fatalf("list-delete --force: %v", err)
+	}
+}
+
+func TestAddCmd_WithListName(t *testing.T) {
+	taskSvc, listSvc := testServices()
+	root := NewRootCmd(taskSvc, listSvc, testCfg(), "test")
+	root.SetOut(new(bytes.Buffer))
+	root.SetErr(new(bytes.Buffer))
+	root.SetArgs([]string{"add", "Task in Work", "--list", "Work"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("add with list: %v", err)
+	}
+}
+
+func TestAddCmd_WithExistingListName(t *testing.T) {
+	taskSvc, listSvc := testServices()
+	// Create a list first.
+	root := NewRootCmd(taskSvc, listSvc, testCfg(), "test")
+	root.SetOut(new(bytes.Buffer))
+	root.SetErr(new(bytes.Buffer))
+	root.SetArgs([]string{"list-create", "Existing"})
+	root.Execute()
+
+	// Add task to the existing list by name.
+	root2 := NewRootCmd(taskSvc, listSvc, testCfg(), "test")
+	root2.SetOut(new(bytes.Buffer))
+	root2.SetErr(new(bytes.Buffer))
+	root2.SetArgs([]string{"add", "Task in Existing", "--list", "Existing"})
+	if err := root2.Execute(); err != nil {
+		t.Fatalf("add with existing list: %v", err)
+	}
+}
+
+func TestDoneCmd_NoArgs(t *testing.T) {
+	taskSvc, listSvc := testServices()
+	root := NewRootCmd(taskSvc, listSvc, testCfg(), "test")
+	root.SilenceErrors = true
+	root.SilenceUsage = true
+	root.SetArgs([]string{"done"})
+	if err := root.Execute(); err == nil {
+		t.Error("expected error for missing args")
+	}
+}
+
+func TestStatusCmd_NoArgs(t *testing.T) {
+	taskSvc, listSvc := testServices()
+	root := NewRootCmd(taskSvc, listSvc, testCfg(), "test")
+	root.SilenceErrors = true
+	root.SilenceUsage = true
+	root.SetArgs([]string{"status"})
+	if err := root.Execute(); err == nil {
+		t.Error("expected error for missing args")
+	}
+}
+
+func TestListsCmd_WithLists(t *testing.T) {
+	taskSvc, listSvc := testServices()
+	root := NewRootCmd(taskSvc, listSvc, testCfg(), "test")
+	root.SetOut(new(bytes.Buffer))
+	root.SetErr(new(bytes.Buffer))
+	root.SetArgs([]string{"list-create", "A"})
+	root.Execute()
+
+	root2 := NewRootCmd(taskSvc, listSvc, testCfg(), "test")
+	root2.SetOut(new(bytes.Buffer))
+	root2.SetArgs([]string{"lists"})
+	if err := root2.Execute(); err != nil {
+		t.Fatalf("lists: %v", err)
+	}
+}

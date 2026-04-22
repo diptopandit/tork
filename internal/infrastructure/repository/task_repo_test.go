@@ -309,6 +309,292 @@ func TestListRepo_DeleteCascade(t *testing.T) {
 	}
 }
 
+// ---- List filter / sort / nullable field tests -----------------------------
+
+func TestTaskRepo_List_FilterByStatus(t *testing.T) {
+	conn := openTestDB(t)
+	listID := seedList(t, conn)
+	repo := NewTaskRepo(conn)
+	now := time.Now()
+
+	repo.Create(&domain.Task{
+		ID: "t-s1", NumID: 1, ListID: listID, Title: "Todo",
+		Status: domain.StatusTodo, Priority: domain.PriorityMedium,
+		DependsOn: []string{}, CreatedAt: now, UpdatedAt: now,
+	})
+	repo.Create(&domain.Task{
+		ID: "t-s2", NumID: 2, ListID: listID, Title: "Done",
+		Status: domain.StatusDone, Priority: domain.PriorityMedium,
+		DependsOn: []string{}, CreatedAt: now, UpdatedAt: now,
+	})
+
+	tasks, err := repo.List(domain.TaskFilter{Statuses: []domain.Status{domain.StatusTodo}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tasks) != 1 || tasks[0].Title != "Todo" {
+		t.Errorf("expected 1 todo task, got %d", len(tasks))
+	}
+}
+
+func TestTaskRepo_List_FilterByPriority(t *testing.T) {
+	conn := openTestDB(t)
+	listID := seedList(t, conn)
+	repo := NewTaskRepo(conn)
+	now := time.Now()
+
+	repo.Create(&domain.Task{
+		ID: "t-p1", NumID: 1, ListID: listID, Title: "Low",
+		Status: domain.StatusTodo, Priority: domain.PriorityLow,
+		DependsOn: []string{}, CreatedAt: now, UpdatedAt: now,
+	})
+	repo.Create(&domain.Task{
+		ID: "t-p2", NumID: 2, ListID: listID, Title: "High",
+		Status: domain.StatusTodo, Priority: domain.PriorityHigh,
+		DependsOn: []string{}, CreatedAt: now, UpdatedAt: now,
+	})
+
+	tasks, err := repo.List(domain.TaskFilter{Priorities: []domain.Priority{domain.PriorityHigh}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tasks) != 1 || tasks[0].Title != "High" {
+		t.Errorf("expected 1 high task, got %d", len(tasks))
+	}
+}
+
+func TestTaskRepo_List_FilterByListID(t *testing.T) {
+	conn := openTestDB(t)
+	repo := NewTaskRepo(conn)
+	listRepo := NewListRepo(conn)
+	now := time.Now()
+
+	l1 := &domain.TaskList{ID: "list-a", Name: "A", Schema: map[string]domain.FieldDefinition{}, CreatedAt: now}
+	l2 := &domain.TaskList{ID: "list-b", Name: "B", Schema: map[string]domain.FieldDefinition{}, CreatedAt: now}
+	listRepo.Create(l1)
+	listRepo.Create(l2)
+
+	repo.Create(&domain.Task{
+		ID: "t-la", NumID: 1, ListID: "list-a", Title: "In A",
+		Status: domain.StatusTodo, Priority: domain.PriorityMedium,
+		DependsOn: []string{}, CreatedAt: now, UpdatedAt: now,
+	})
+	repo.Create(&domain.Task{
+		ID: "t-lb", NumID: 2, ListID: "list-b", Title: "In B",
+		Status: domain.StatusTodo, Priority: domain.PriorityMedium,
+		DependsOn: []string{}, CreatedAt: now, UpdatedAt: now,
+	})
+
+	tasks, err := repo.List(domain.TaskFilter{ListIDs: []string{"list-a"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tasks) != 1 || tasks[0].Title != "In A" {
+		t.Errorf("expected 1 task from list-a, got %d", len(tasks))
+	}
+}
+
+func TestTaskRepo_List_FilterByDueBefore(t *testing.T) {
+	conn := openTestDB(t)
+	listID := seedList(t, conn)
+	repo := NewTaskRepo(conn)
+	now := time.Now()
+	past := now.Add(-24 * time.Hour)
+	future := now.Add(48 * time.Hour)
+
+	repo.Create(&domain.Task{
+		ID: "t-d1", NumID: 1, ListID: listID, Title: "Past due",
+		Status: domain.StatusTodo, Priority: domain.PriorityMedium,
+		DueDate: &past, DependsOn: []string{}, CreatedAt: now, UpdatedAt: now,
+	})
+	repo.Create(&domain.Task{
+		ID: "t-d2", NumID: 2, ListID: listID, Title: "Future due",
+		Status: domain.StatusTodo, Priority: domain.PriorityMedium,
+		DueDate: &future, DependsOn: []string{}, CreatedAt: now, UpdatedAt: now,
+	})
+
+	cutoff := now
+	tasks, err := repo.List(domain.TaskFilter{DueBefore: &cutoff})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tasks) != 1 || tasks[0].Title != "Past due" {
+		t.Errorf("expected 1 past-due task, got %d", len(tasks))
+	}
+}
+
+func TestTaskRepo_List_SortByPriority(t *testing.T) {
+	conn := openTestDB(t)
+	listID := seedList(t, conn)
+	repo := NewTaskRepo(conn)
+	now := time.Now()
+
+	repo.Create(&domain.Task{
+		ID: "t-sp1", NumID: 1, ListID: listID, Title: "Low",
+		Status: domain.StatusTodo, Priority: domain.PriorityLow,
+		DependsOn: []string{}, CreatedAt: now, UpdatedAt: now,
+	})
+	repo.Create(&domain.Task{
+		ID: "t-sp2", NumID: 2, ListID: listID, Title: "High",
+		Status: domain.StatusTodo, Priority: domain.PriorityHigh,
+		DependsOn: []string{}, CreatedAt: now, UpdatedAt: now,
+	})
+
+	tasks, err := repo.List(domain.TaskFilter{SortField: domain.SortByPriority, SortDir: domain.SortAsc})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tasks) != 2 {
+		t.Fatalf("got %d tasks", len(tasks))
+	}
+	if tasks[0].Priority > tasks[1].Priority {
+		t.Errorf("expected ascending priority, got %d then %d", tasks[0].Priority, tasks[1].Priority)
+	}
+}
+
+func TestTaskRepo_List_SortByDueDate(t *testing.T) {
+	conn := openTestDB(t)
+	listID := seedList(t, conn)
+	repo := NewTaskRepo(conn)
+	now := time.Now()
+	d1 := now.Add(24 * time.Hour)
+	d2 := now.Add(48 * time.Hour)
+
+	repo.Create(&domain.Task{
+		ID: "t-sd1", NumID: 1, ListID: listID, Title: "Later",
+		Status: domain.StatusTodo, Priority: domain.PriorityMedium,
+		DueDate: &d2, DependsOn: []string{}, CreatedAt: now, UpdatedAt: now,
+	})
+	repo.Create(&domain.Task{
+		ID: "t-sd2", NumID: 2, ListID: listID, Title: "Sooner",
+		Status: domain.StatusTodo, Priority: domain.PriorityMedium,
+		DueDate: &d1, DependsOn: []string{}, CreatedAt: now, UpdatedAt: now,
+	})
+
+	tasks, err := repo.List(domain.TaskFilter{SortField: domain.SortByDueDate, SortDir: domain.SortAsc})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tasks) != 2 || tasks[0].Title != "Sooner" {
+		t.Errorf("expected Sooner first, got %q", tasks[0].Title)
+	}
+}
+
+func TestTaskRepo_List_SortByID(t *testing.T) {
+	conn := openTestDB(t)
+	listID := seedList(t, conn)
+	repo := NewTaskRepo(conn)
+	now := time.Now()
+
+	repo.Create(&domain.Task{
+		ID: "t-si1", NumID: 10, ListID: listID, Title: "Ten",
+		Status: domain.StatusTodo, Priority: domain.PriorityMedium,
+		DependsOn: []string{}, CreatedAt: now, UpdatedAt: now,
+	})
+	repo.Create(&domain.Task{
+		ID: "t-si2", NumID: 5, ListID: listID, Title: "Five",
+		Status: domain.StatusTodo, Priority: domain.PriorityMedium,
+		DependsOn: []string{}, CreatedAt: now, UpdatedAt: now,
+	})
+
+	tasks, err := repo.List(domain.TaskFilter{SortField: domain.SortByID, SortDir: domain.SortDesc})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tasks) != 2 || tasks[0].NumID != 10 {
+		t.Errorf("expected NumID=10 first, got %d", tasks[0].NumID)
+	}
+}
+
+func TestTaskRepo_Create_WithNullableFields(t *testing.T) {
+	conn := openTestDB(t)
+	listID := seedList(t, conn)
+	repo := NewTaskRepo(conn)
+	now := time.Now()
+	due := now.Add(24 * time.Hour)
+	parentID := "parent-1"
+
+	task := &domain.Task{
+		ID: "t-nf", NumID: 1, ListID: listID, Title: "With nullables",
+		Description: "A description",
+		Status:      domain.StatusTodo, Priority: domain.PriorityHigh,
+		DueDate: &due, ParentID: &parentID,
+		Tags: []string{"tag1"}, CustomFields: map[string]interface{}{"key": "val"},
+		DependsOn: []string{"dep1"}, CreatedAt: now, UpdatedAt: now,
+	}
+	if err := repo.Create(task); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := repo.GetByID("t-nf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.DueDate == nil {
+		t.Error("expected due date")
+	}
+	if got.ParentID == nil || *got.ParentID != parentID {
+		t.Errorf("parentID = %v, want %q", got.ParentID, parentID)
+	}
+	if got.Description != "A description" {
+		t.Errorf("description = %q", got.Description)
+	}
+	if len(got.CustomFields) == 0 {
+		t.Error("expected custom fields")
+	}
+	if len(got.DependsOn) != 1 {
+		t.Error("expected depends_on")
+	}
+}
+
+func TestTaskRepo_Update_WithNullableFields(t *testing.T) {
+	conn := openTestDB(t)
+	listID := seedList(t, conn)
+	repo := NewTaskRepo(conn)
+	now := time.Now()
+
+	task := &domain.Task{
+		ID: "t-un", NumID: 1, ListID: listID, Title: "No nullables",
+		Status: domain.StatusTodo, Priority: domain.PriorityMedium,
+		DependsOn: []string{}, CreatedAt: now, UpdatedAt: now,
+	}
+	repo.Create(task)
+
+	// Set nullable fields via update.
+	due := now.Add(72 * time.Hour)
+	pid := "p1"
+	task.DueDate = &due
+	task.ParentID = &pid
+	task.Description = "Now with desc"
+	task.CustomFields = map[string]interface{}{"x": 1.0}
+	task.Tags = []string{"a", "b"}
+	if err := repo.Update(task); err != nil {
+		t.Fatal(err)
+	}
+
+	got, _ := repo.GetByID("t-un")
+	if got.DueDate == nil {
+		t.Error("expected due date after update")
+	}
+	if got.ParentID == nil {
+		t.Error("expected parent_id after update")
+	}
+}
+
+func TestTaskRepo_NextNumID_Empty(t *testing.T) {
+	conn := openTestDB(t)
+	// Don't seed any tasks.
+	repo := NewTaskRepo(conn)
+
+	next, err := repo.NextNumID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if next != 1 {
+		t.Errorf("next num_id = %d, want 1 for empty table", next)
+	}
+}
+
 func TestUpdateRepo_AddAndList(t *testing.T) {
 	conn := openTestDB(t)
 	listID := seedList(t, conn)

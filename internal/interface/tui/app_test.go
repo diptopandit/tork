@@ -1242,3 +1242,347 @@ func TestFullHelp(t *testing.T) {
 type mockCloser struct{ closed bool }
 
 func (c *mockCloser) Close() error { c.closed = true; return nil }
+
+// ---- command factory tests (deleteTask, markDone, cycleStatus, etc.) --------
+
+func TestDeleteTask_CmdReturnsMsg(t *testing.T) {
+	m := sizedModel()
+	cmd := m.deleteTask("t1")
+	if cmd == nil {
+		t.Fatal("expected cmd")
+	}
+	msg := cmd()
+	dm, ok := msg.(taskDeletedMsg)
+	if !ok {
+		t.Fatalf("expected taskDeletedMsg, got %T", msg)
+	}
+	if dm.err != nil {
+		t.Errorf("err = %v", dm.err)
+	}
+	if dm.id != "t1" {
+		t.Errorf("id = %q", dm.id)
+	}
+}
+
+func TestMarkDone_CmdReturnsMsg(t *testing.T) {
+	m := sizedModel()
+	task := &domain.Task{ID: "t1", Status: domain.StatusTodo}
+	cmd := m.markDone(task)
+	msg := cmd()
+	um, ok := msg.(taskUpdatedMsg)
+	if !ok {
+		t.Fatalf("expected taskUpdatedMsg, got %T", msg)
+	}
+	if um.err != nil {
+		t.Errorf("err = %v", um.err)
+	}
+	if um.task.Status != domain.StatusDone {
+		t.Errorf("status = %q, want done", um.task.Status)
+	}
+}
+
+func TestCycleStatus_CmdReturnsMsg(t *testing.T) {
+	m := sizedModel()
+	task := &domain.Task{ID: "t1", Status: domain.StatusTodo}
+	cmd := m.cycleStatus(task)
+	msg := cmd()
+	um, ok := msg.(taskUpdatedMsg)
+	if !ok {
+		t.Fatalf("expected taskUpdatedMsg, got %T", msg)
+	}
+	if um.err != nil {
+		t.Errorf("err = %v", um.err)
+	}
+	// todo → in_progress
+	if um.task.Status != domain.StatusInProgress {
+		t.Errorf("status = %q, want in_progress", um.task.Status)
+	}
+}
+
+func TestCreateTask_CmdReturnsMsg(t *testing.T) {
+	m := sizedModel()
+	task := &domain.Task{Title: "New task", Status: domain.StatusTodo, Priority: domain.PriorityMedium}
+	cmd := m.createTask(task, "l1")
+	msg := cmd()
+	cm, ok := msg.(taskCreatedMsg)
+	if !ok {
+		t.Fatalf("expected taskCreatedMsg, got %T", msg)
+	}
+	if cm.err != nil {
+		t.Errorf("err = %v", cm.err)
+	}
+	if cm.task.Title != "New task" {
+		t.Errorf("title = %q", cm.task.Title)
+	}
+}
+
+func TestUpdateTask_CmdReturnsMsg(t *testing.T) {
+	m := sizedModel()
+	task := &domain.Task{ID: "t1", Title: "Updated", Status: domain.StatusTodo, Priority: domain.PriorityHigh}
+	cmd := m.updateTask(task)
+	msg := cmd()
+	um, ok := msg.(taskUpdatedMsg)
+	if !ok {
+		t.Fatalf("expected taskUpdatedMsg, got %T", msg)
+	}
+	if um.err != nil {
+		t.Errorf("err = %v", um.err)
+	}
+}
+
+func TestAddUpdate_CmdReturnsMsg(t *testing.T) {
+	m := sizedModel()
+	cmd := m.addUpdate("t1", "progress note")
+	msg := cmd()
+	am, ok := msg.(updateAddedMsg)
+	if !ok {
+		t.Fatalf("expected updateAddedMsg, got %T", msg)
+	}
+	if am.err != nil {
+		t.Errorf("err = %v", am.err)
+	}
+}
+
+func TestLoadUpdates_CmdReturnsMsg(t *testing.T) {
+	m := sizedModel()
+	cmd := m.loadUpdates("t1")
+	msg := cmd()
+	lm, ok := msg.(updatesLoadedMsg)
+	if !ok {
+		t.Fatalf("expected updatesLoadedMsg, got %T", msg)
+	}
+	if lm.err != nil {
+		t.Errorf("err = %v", lm.err)
+	}
+	if lm.taskID != "t1" {
+		t.Errorf("taskID = %q", lm.taskID)
+	}
+}
+
+func TestCreateList_CmdReturnsMsg(t *testing.T) {
+	m := sizedModel()
+	cmd := m.createList("Work")
+	msg := cmd()
+	lm, ok := msg.(listCreatedMsg)
+	if !ok {
+		t.Fatalf("expected listCreatedMsg, got %T", msg)
+	}
+	if lm.err != nil {
+		t.Errorf("err = %v", lm.err)
+	}
+	if lm.list.Name != "Work" {
+		t.Errorf("name = %q", lm.list.Name)
+	}
+}
+
+func TestRenameList_CmdReturnsMsg(t *testing.T) {
+	m := sizedModel()
+	cmd := m.renameList("l1", "Renamed")
+	msg := cmd()
+	lm, ok := msg.(listUpdatedMsg)
+	if !ok {
+		t.Fatalf("expected listUpdatedMsg, got %T", msg)
+	}
+	if lm.err != nil {
+		t.Errorf("err = %v", lm.err)
+	}
+}
+
+func TestDeleteList_CmdReturnsMsg(t *testing.T) {
+	m := sizedModel()
+	cmd := m.deleteList("l1")
+	msg := cmd()
+	lm, ok := msg.(listDeletedMsg)
+	if !ok {
+		t.Fatalf("expected listDeletedMsg, got %T", msg)
+	}
+	if lm.err != nil {
+		t.Errorf("err = %v", lm.err)
+	}
+	if lm.id != "l1" {
+		t.Errorf("id = %q", lm.id)
+	}
+}
+
+// ---- handleEditKeys tests ---------------------------------------------------
+
+func TestHandleEditKeys_EscClosesOverlay(t *testing.T) {
+	m := sizedModel()
+	m.state.ActiveOverlay = OverlayEdit
+	newM, _ := m.handleEditKeys(specialKey(tea.KeyEsc))
+	mm := newM.(Model)
+	if mm.state.ActiveOverlay != OverlayNone {
+		t.Errorf("overlay = %d after esc, want OverlayNone", mm.state.ActiveOverlay)
+	}
+}
+
+func TestHandleFilterKeys_EscClosesOverlay(t *testing.T) {
+	m := sizedModel()
+	m.state.ActiveOverlay = OverlayFilter
+	newM, _ := m.handleFilterKeys(specialKey(tea.KeyEsc))
+	mm := newM.(Model)
+	if mm.state.ActiveOverlay != OverlayNone {
+		t.Errorf("overlay = %d after esc, want OverlayNone", mm.state.ActiveOverlay)
+	}
+}
+
+// ---- delete key in list pane ------------------------------------------------
+
+func TestListPane_DeleteKey(t *testing.T) {
+	m := sizedModel()
+	m.state.ActivePane = PaneList
+	m.state.ActiveListID = "l1"
+	now := time.Now()
+	tasks := []domain.Task{
+		{ID: "t1", NumID: 1, ListID: "l1", Title: "T1", Status: domain.StatusTodo, Priority: domain.PriorityMedium, CreatedAt: now, UpdatedAt: now},
+	}
+	m.state.Tasks = tasks
+	m.listView = m.listView.SetTasks(tasks)
+
+	newM, cmd := m.Update(keyMsg("d"))
+	_ = newM
+	if cmd == nil {
+		t.Error("expected delete cmd from d key")
+	}
+}
+
+// ---- done key in list pane --------------------------------------------------
+
+func TestListPane_DoneKey(t *testing.T) {
+	m := sizedModel()
+	m.state.ActivePane = PaneList
+	m.state.ActiveListID = "l1"
+	now := time.Now()
+	tasks := []domain.Task{
+		{ID: "t1", NumID: 1, ListID: "l1", Title: "T1", Status: domain.StatusTodo, Priority: domain.PriorityMedium, CreatedAt: now, UpdatedAt: now},
+	}
+	m.state.Tasks = tasks
+	m.listView = m.listView.SetTasks(tasks)
+
+	newM, cmd := m.Update(keyMsg("x"))
+	_ = newM
+	if cmd == nil {
+		t.Error("expected done cmd from x key")
+	}
+}
+
+// ---- status key in list pane ------------------------------------------------
+
+func TestListPane_StatusKey(t *testing.T) {
+	m := sizedModel()
+	m.state.ActivePane = PaneList
+	m.state.ActiveListID = "l1"
+	now := time.Now()
+	tasks := []domain.Task{
+		{ID: "t1", NumID: 1, ListID: "l1", Title: "T1", Status: domain.StatusTodo, Priority: domain.PriorityMedium, CreatedAt: now, UpdatedAt: now},
+	}
+	m.state.Tasks = tasks
+	m.listView = m.listView.SetTasks(tasks)
+
+	newM, cmd := m.Update(keyMsg("s"))
+	_ = newM
+	if cmd == nil {
+		t.Error("expected cycle status cmd from s key")
+	}
+}
+
+// ---- detail pane done/status keys -------------------------------------------
+
+func TestDetailPane_DoneKey(t *testing.T) {
+	m := sizedModel()
+	m.state.ActivePane = PaneDetail
+	m.state.ActiveListID = "l1"
+	now := time.Now()
+	task := domain.Task{ID: "t1", NumID: 1, ListID: "l1", Title: "T1", Status: domain.StatusTodo, Priority: domain.PriorityMedium, CreatedAt: now, UpdatedAt: now}
+	m.state.Tasks = []domain.Task{task}
+	m.state.SelectedTask = &task
+	m.listView = m.listView.SetTasks(m.state.Tasks)
+
+	newM, cmd := m.Update(keyMsg("x"))
+	_ = newM
+	if cmd == nil {
+		t.Error("expected done cmd from x key in detail pane")
+	}
+}
+
+func TestDetailPane_StatusKey(t *testing.T) {
+	m := sizedModel()
+	m.state.ActivePane = PaneDetail
+	m.state.ActiveListID = "l1"
+	now := time.Now()
+	task := domain.Task{ID: "t1", NumID: 1, ListID: "l1", Title: "T1", Status: domain.StatusTodo, Priority: domain.PriorityMedium, CreatedAt: now, UpdatedAt: now}
+	m.state.Tasks = []domain.Task{task}
+	m.state.SelectedTask = &task
+	m.listView = m.listView.SetTasks(m.state.Tasks)
+
+	newM, cmd := m.Update(keyMsg("s"))
+	_ = newM
+	if cmd == nil {
+		t.Error("expected cycle status cmd from s key in detail pane")
+	}
+}
+
+// ---- message handling tests -------------------------------------------------
+
+func TestUpdate_TaskDeletedMsg(t *testing.T) {
+	m := sizedModel()
+	m.state.ActiveListID = "l1"
+	now := time.Now()
+	m.state.Tasks = []domain.Task{
+		{ID: "t1", NumID: 1, ListID: "l1", Title: "T1", Status: domain.StatusTodo, Priority: domain.PriorityMedium, CreatedAt: now, UpdatedAt: now},
+	}
+
+	newM, _ := m.Update(taskDeletedMsg{id: "t1"})
+	mm := newM.(Model)
+	if mm.state.StatusMsg == "" {
+		t.Error("expected status message after delete")
+	}
+}
+
+func TestUpdate_TaskCreatedMsg(t *testing.T) {
+	m := sizedModel()
+	m.state.ActiveListID = "l1"
+	now := time.Now()
+	task := &domain.Task{ID: "new1", NumID: 99, ListID: "l1", Title: "Created", Status: domain.StatusTodo, Priority: domain.PriorityMedium, CreatedAt: now, UpdatedAt: now}
+
+	newM, _ := m.Update(taskCreatedMsg{task: task})
+	mm := newM.(Model)
+	if mm.state.StatusMsg == "" {
+		t.Error("expected status message after create")
+	}
+}
+
+func TestUpdate_ListCreatedMsg(t *testing.T) {
+	m := sizedModel()
+	list := &domain.TaskList{ID: "l2", Name: "Work", CreatedAt: time.Now()}
+
+	newM, _ := m.Update(listCreatedMsg{list: list})
+	mm := newM.(Model)
+	if mm.state.StatusMsg == "" {
+		t.Error("expected status message after list create")
+	}
+}
+
+func TestUpdate_ListDeletedMsg(t *testing.T) {
+	m := sizedModel()
+	m.state.ActiveListID = "l1"
+
+	newM, _ := m.Update(listDeletedMsg{id: "l1"})
+	mm := newM.(Model)
+	_ = mm // just ensure no panic
+}
+
+func TestUpdate_UpdateAddedMsg(t *testing.T) {
+	m := sizedModel()
+	now := time.Now()
+	task := domain.Task{ID: "t1", NumID: 1, ListID: "l1", Title: "T1", Status: domain.StatusTodo, Priority: domain.PriorityMedium, CreatedAt: now, UpdatedAt: now}
+	m.state.Tasks = []domain.Task{task}
+	m.state.SelectedTask = &task
+
+	u := &domain.Update{ID: "u1", TaskID: "t1", Body: "note", CreatedAt: now}
+	newM, _ := m.Update(updateAddedMsg{update: u})
+	mm := newM.(Model)
+	if mm.state.StatusMsg == "" {
+		t.Error("expected status message after update added")
+	}
+}

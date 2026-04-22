@@ -58,14 +58,14 @@ test:
 
 ## test-coverage: run tests with coverage report
 test-coverage:
-	go test -coverprofile=coverage.out -count=1 ./...
+	go test -coverprofile=coverage.out -count=1 ./internal/...
 	go tool cover -func=coverage.out
 	@echo ""
 	@echo "Coverage profile: coverage.out"
 
 ## test-coverage-html: generate HTML coverage report and open it
 test-coverage-html: test-coverage
-	go tool cover -html=coverage.out -o coverage.html
+	go run ./tools/covreport -i coverage.out -o coverage.html
 	@echo "HTML report: coverage.html"
 
 ## test-integration: run MySQL integration tests (requires Docker)
@@ -84,6 +84,27 @@ test-integration:
 	done
 	TORK_MYSQL_DSN="root:tork@tcp(127.0.0.1:3306)/tork_test" go test -v ./... || (docker rm -f tork-mysql-test && exit 1)
 	docker rm -f tork-mysql-test
+
+## test-coverage-integration: run all tests (including MySQL) with coverage + HTML report (requires Docker)
+test-coverage-integration:
+	@docker rm -f tork-mysql-test 2>/dev/null || true
+	docker run -d --name tork-mysql-test \
+		-e MYSQL_ROOT_PASSWORD=tork \
+		-e MYSQL_DATABASE=tork_test \
+		-p 3306:3306 \
+		--tmpfs /var/lib/mysql \
+		mysql:8.0
+	@echo "Waiting for MySQL to be ready..."
+	@for i in $$(seq 1 40); do \
+		docker exec tork-mysql-test mysql -h localhost -ptork -e "SELECT 1" tork_test >/dev/null 2>&1 && break; \
+		sleep 3; \
+	done
+	TORK_MYSQL_DSN="root:tork@tcp(127.0.0.1:3306)/tork_test" go test -coverprofile=coverage.out -count=1 ./internal/... || (docker rm -f tork-mysql-test && exit 1)
+	docker rm -f tork-mysql-test
+	go tool cover -func=coverage.out
+	go run ./tools/covreport -i coverage.out -o coverage.html
+	@echo ""
+	@echo "HTML report: coverage.html"
 
 ## vet: run static analysis
 vet:
@@ -106,7 +127,7 @@ install:
 version:
 	@echo $(VERSION)
 
-## release: build for a single platform (usage: make release PLATFORM=darwin_arm64)
+## release: build for a single platform (make release PLATFORM=darwin_arm64)
 release:
 ifndef PLATFORM
 	$(error PLATFORM is required, e.g. make release PLATFORM=darwin_arm64)

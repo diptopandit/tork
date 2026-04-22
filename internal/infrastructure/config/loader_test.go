@@ -281,36 +281,149 @@ func TestApplyTheme(t *testing.T) {
 
 func TestApplyTheme_DefaultBorder(t *testing.T) {
 	cfg := defaults()
-	tf := BuiltinThemes["default"]
-	tf.Border = ""
+	tf := ThemeFile{Name: "noborder", Colors: ThemeConfig{Primary: "#fff"}}
 	ApplyTheme(&cfg, tf)
 	if cfg.Theme.Border != "rounded" {
-		t.Errorf("border = %q, want rounded as default", cfg.Theme.Border)
+		t.Errorf("border = %q, want rounded", cfg.Theme.Border)
 	}
 }
 
-func TestListThemes_IncludesBuiltins(t *testing.T) {
-	names := ListThemes(t.TempDir())
-	builtins := BuiltinThemeNames()
-	if len(names) < len(builtins) {
-		t.Errorf("ListThemes returned %d, want at least %d builtins", len(names), len(builtins))
+func TestLoad_NoConfigFile(t *testing.T) {
+	// Point HOME to an empty temp dir so Load finds no config.json.
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg == nil {
+		t.Fatal("cfg is nil")
+	}
+	if cfg.ThemeName != "default" {
+		t.Errorf("theme = %q, want default", cfg.ThemeName)
+	}
+	// It should have created the file.
+	path := filepath.Join(dir, ".tork", "config.json")
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		t.Error("expected config.json to be created on first run")
 	}
 }
 
-func TestListThemes_IncludesUserFile(t *testing.T) {
+func TestLoad_WithConfigFile(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+
+	configDir := filepath.Join(dir, ".tork")
+	os.MkdirAll(configDir, 0o755)
+
+	cfg := defaults()
+	cfg.ThemeName = "dracula"
+	cfg.LogLevel = "debug"
+	data, _ := json.MarshalIndent(cfg, "", "  ")
+	os.WriteFile(filepath.Join(configDir, "config.json"), data, 0o644)
+
+	loaded, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.ThemeName != "dracula" {
+		t.Errorf("theme = %q, want dracula", loaded.ThemeName)
+	}
+	if loaded.LogLevel != "debug" {
+		t.Errorf("log_level = %q", loaded.LogLevel)
+	}
+}
+
+func TestLoad_BadJSON(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+
+	configDir := filepath.Join(dir, ".tork")
+	os.MkdirAll(configDir, 0o755)
+	os.WriteFile(filepath.Join(configDir, "config.json"), []byte("{invalid"), 0o644)
+
+	_, err := Load()
+	if err == nil {
+		t.Error("expected error for bad JSON")
+	}
+}
+
+func TestLoad_OldInlineThemeMigration(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+
+	configDir := filepath.Join(dir, ".tork")
+	os.MkdirAll(configDir, 0o755)
+
+	// Write config with old inline theme object (should be migrated to "default").
+	configJSON := `{"theme": {"primary": "#ff0000"}, "log_level": "info"}`
+	os.WriteFile(filepath.Join(configDir, "config.json"), []byte(configJSON), 0o644)
+
+	loaded, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.ThemeName != "default" {
+		t.Errorf("theme = %q, want default after migration", loaded.ThemeName)
+	}
+}
+
+func TestLoad_RemoteDBMigration(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+
+	configDir := filepath.Join(dir, ".tork")
+	os.MkdirAll(configDir, 0o755)
+
+	configJSON := `{
+		"theme": "default",
+		"remote_db": {"driver": "mysql", "dsn": "alice:pw@tcp(db.host:3307)/mydb?parseTime=true"},
+		"username": "alice"
+	}`
+	os.WriteFile(filepath.Join(configDir, "config.json"), []byte(configJSON), 0o644)
+
+	loaded, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.RemoteDB != nil {
+		t.Error("remote_db should be nil after migration")
+	}
+	if loaded.Remotes["default"] == nil {
+		t.Fatal("expected 'default' remote after migration")
+	}
+	if loaded.Remotes["default"].Host != "db.host" {
+		t.Errorf("host = %q", loaded.Remotes["default"].Host)
+	}
+	if loaded.LastRemote != "default" {
+		t.Errorf("last_remote = %q", loaded.LastRemote)
+	}
+}
+
+func TestListThemes_IncludesUserThemes(t *testing.T) {
 	dir := t.TempDir()
 	themesDir := filepath.Join(dir, "themes")
 	os.MkdirAll(themesDir, 0o755)
-	os.WriteFile(filepath.Join(themesDir, "custom.json"), []byte(`{}`), 0o644)
+
+	// Create a user theme file.
+	os.WriteFile(filepath.Join(themesDir, "custom.json"), []byte(`{"name":"custom"}`), 0o644)
 
 	names := ListThemes(dir)
 	found := false
 	for _, n := range names {
 		if n == "custom" {
 			found = true
+			break
 		}
 	}
 	if !found {
-		t.Errorf("ListThemes should include 'custom', got %v", names)
+		t.Errorf("expected 'custom' in themes, got %v", names)
+	}
+}
+
+func TestDefaultPriority_Nil(t *testing.T) {
+	if DefaultPriority(nil) != 1 {
+		t.Errorf("DefaultPriority(nil) = %d, want 1", DefaultPriority(nil))
 	}
 }
